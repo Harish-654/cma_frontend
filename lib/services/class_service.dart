@@ -6,7 +6,6 @@ import '../models/user_model.dart';
 class ClassService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  // Generate random 6-character class code
   String _generateClassCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     final random = Random();
@@ -16,32 +15,63 @@ class ClassService {
     ).join();
   }
 
-  // Get classes where user is representative
   Future<List<ClassModel>> getMyClasses() async {
     final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return [];
+    if (userId == null) {
+      print('getMyClasses: User not authenticated');
+      return [];
+    }
 
     try {
-      final response = await _supabase
+      print('=== GET MY CLASSES DEBUG ===');
+      print('User ID: $userId');
+
+      // Get classes where user is the representative
+      print('Fetching representative classes...');
+      final repClasses = await _supabase
           .from('classes')
           .select()
-          .eq('representative_by', userId);
+          .eq('representative_id', userId);
 
-      return (response as List)
-          .map((json) => ClassModel.fromJson(json))
-          .toList();
-    } catch (e) {
-      print('Error fetching classes: $e');
+      print('Representative classes: ${repClasses.length}');
+
+      // Get classes where user is a member
+      print('Fetching member classes...');
+      final memberResponse = await _supabase
+          .from('class_members')
+          .select('class_id, classes!inner(*)')
+          .eq('user_id', userId);
+
+      print('Member classes response: ${memberResponse.length}');
+
+      // Combine both
+      List<ClassModel> allClasses = [];
+
+      // Add rep classes
+      for (var json in (repClasses as List)) {
+        allClasses.add(ClassModel.fromJson(json));
+      }
+
+      // Add member classes
+      for (var item in (memberResponse as List)) {
+        allClasses.add(ClassModel.fromJson(item['classes']));
+      }
+
+      print('Total classes: ${allClasses.length}');
+      return allClasses;
+    } catch (e, stackTrace) {
+      print('=== ERROR FETCHING CLASSES ===');
+      print('Error: $e');
+      print('Stack: $stackTrace');
       return [];
     }
   }
 
-  // Get class members (students)
   Future<List<UserModel>> getClassMembers(String classId) async {
     try {
       final response = await _supabase
           .from('class_members')
-          .select('users(*)')
+          .select('user_id, users!inner(*)')
           .eq('class_id', classId);
 
       return (response as List)
@@ -53,7 +83,6 @@ class ClassService {
     }
   }
 
-  // Create a new class
   Future<ClassModel> createClass({
     required String name,
     String? description,
@@ -65,9 +94,8 @@ class ClassService {
 
       final classCode = _generateClassCode();
 
-      print(
-        'Inserting class: name=$name, batch=$batch, code=$classCode',
-      ); // Debug
+      print('=== CREATE CLASS DEBUG ===');
+      print('Creating class: $name');
 
       final response = await _supabase
           .from('classes')
@@ -76,37 +104,82 @@ class ClassService {
             'description': description,
             'class_code': classCode,
             'batch': batch,
-            'representative_by': userId,
+            'representative_id': userId,
           })
           .select()
           .single();
 
-      print('Class inserted successfully: $response'); // Debug
+      print('Class created successfully!');
 
       return ClassModel.fromJson(response);
     } catch (e, stackTrace) {
-      print('Error in createClass: $e'); // Debug
-      print('Stack trace: $stackTrace'); // Debug
+      print('Error creating class: $e');
+      print('Stack trace: $stackTrace');
       rethrow;
     }
   }
 
-  // Join class with code
   Future<void> joinClass(String classCode) async {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) throw Exception('Not authenticated');
+    try {
+      final userId = _supabase.auth.currentUser?.id;
 
-    // Find class by code
-    final classResponse = await _supabase
-        .from('classes')
-        .select()
-        .eq('class_code', classCode)
-        .single();
+      print('=== JOIN CLASS DEBUG ===');
+      print('User ID: $userId');
+      print('Class code: $classCode');
 
-    // Add user to class
-    await _supabase.from('class_members').insert({
-      'class_id': classResponse['id'],
-      'user_id': userId,
-    });
+      if (userId == null) {
+        print('ERROR: User not authenticated');
+        throw Exception('Not authenticated');
+      }
+
+      // 1. Find class by code
+      print('Step 1: Searching for class...');
+      final classResponse = await _supabase
+          .from('classes')
+          .select()
+          .eq('class_code', classCode.toUpperCase())
+          .maybeSingle();
+
+      print('Class response: $classResponse');
+
+      if (classResponse == null) {
+        print('ERROR: Class not found');
+        throw Exception('Invalid class code');
+      }
+
+      print('Class found: ${classResponse['name']}');
+
+      // 2. Check if already member
+      print('Step 2: Checking if already a member...');
+      final existingMember = await _supabase
+          .from('class_members')
+          .select()
+          .eq('class_id', classResponse['id'])
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      print('Existing member check: $existingMember');
+
+      if (existingMember != null) {
+        print('ERROR: Already a member');
+        throw Exception('Already a member of this class');
+      }
+
+      // 3. Join class
+      print('Step 3: Inserting into class_members...');
+      final insertData = {'class_id': classResponse['id'], 'user_id': userId};
+
+      print('Insert data: $insertData');
+
+      await _supabase.from('class_members').insert(insertData);
+
+      print('SUCCESS: Joined class!');
+    } catch (e, stackTrace) {
+      print('=== ERROR JOINING CLASS ===');
+      print('Error: $e');
+      print('Type: ${e.runtimeType}');
+      print('Stack: $stackTrace');
+      rethrow;
+    }
   }
 }

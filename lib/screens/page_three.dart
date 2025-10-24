@@ -95,76 +95,7 @@ class _PageThreeState extends State<PageThree> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Create Your Class'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: 'Class Name',
-                  hintText: 'e.g., Computer Science 2024',
-                ),
-              ),
-              SizedBox(height: 12),
-              TextField(
-                controller: batchController,
-                decoration: InputDecoration(
-                  labelText: 'Batch (Optional)',
-                  hintText: 'e.g., 2024-2028',
-                ),
-              ),
-              SizedBox(height: 12),
-              TextField(
-                controller: descController,
-                decoration: InputDecoration(
-                  labelText: 'Description (Optional)',
-                  hintText: 'Brief description',
-                ),
-                maxLines: 2,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop(null); // Return null for skip
-            },
-            child: Text('Skip'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (nameController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  SnackBar(content: Text('Please enter class name')),
-                );
-                return;
-              }
-
-              try {
-                final newClass = await _classService.createClass(
-                  name: nameController.text.trim(),
-                  description: descController.text.isEmpty
-                      ? null
-                      : descController.text.trim(),
-                  batch: batchController.text.isEmpty
-                      ? null
-                      : batchController.text.trim(),
-                );
-
-                // Return the class code
-                Navigator.of(dialogContext).pop(newClass.classCode);
-              } catch (e) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  SnackBar(content: Text('Error: ${e.toString()}')),
-                );
-              }
-            },
-            child: Text('Create'),
-          ),
-        ],
+        // ... same code ...
       ),
     );
 
@@ -174,7 +105,7 @@ class _PageThreeState extends State<PageThree> {
 
     if (!mounted) return;
 
-    // If class was created, show the code
+    // Show success dialog
     if (result != null && result.isNotEmpty) {
       await showDialog(
         context: context,
@@ -226,14 +157,15 @@ class _PageThreeState extends State<PageThree> {
           ],
         ),
       );
+
+      // Reload classes after dialog closes
+      if (mounted) {
+        _loadUserData();
+      }
     }
 
-    // Navigate to main screen AFTER all dialogs close
-    if (!mounted) return;
-
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute(builder: (_) => MainScreen()));
+    // REMOVE THIS LINE - Don't navigate, we're already on MainScreen!
+    // Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => MainScreen()));
   }
 
   Future<void> _showJoinClassDialog() async {
@@ -245,58 +177,7 @@ class _PageThreeState extends State<PageThree> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Join a Class'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Enter the class code from your representative:'),
-            SizedBox(height: 16),
-            TextField(
-              controller: codeController,
-              decoration: InputDecoration(
-                labelText: 'Class Code',
-                hintText: 'e.g., ABC123',
-                border: OutlineInputBorder(),
-              ),
-              textCapitalization: TextCapitalization.characters,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop(false); // Skip
-            },
-            child: Text('Skip for now'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (codeController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  SnackBar(content: Text('Please enter a class code')),
-                );
-                return;
-              }
-
-              try {
-                await _classService.joinClass(
-                  codeController.text.toUpperCase().trim(),
-                );
-
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  SnackBar(content: Text('Joined class successfully!')),
-                );
-
-                Navigator.of(dialogContext).pop(true); // Success
-              } catch (e) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  SnackBar(content: Text('Error: ${e.toString()}')),
-                );
-              }
-            },
-            child: Text('Join'),
-          ),
-        ],
+        // ... same code ...
       ),
     );
 
@@ -309,12 +190,13 @@ class _PageThreeState extends State<PageThree> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Welcome to your class!')));
+
+      // Reload classes
+      _loadUserData();
     }
 
-    // Navigate to main screen AFTER dialog closes
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute(builder: (_) => MainScreen()));
+    // REMOVE THIS LINE - Don't navigate!
+    // Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => MainScreen()));
   }
 
   @override

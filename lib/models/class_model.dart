@@ -24,7 +24,7 @@ class ClassModel {
       description: json['description'],
       batch: json['batch'], // Add this
       classCode: json['class_code'],
-      representativeId: json['representative_by'],
+      representativeId: json['representative_id'],
       createdAt: DateTime.parse(json['created_at']),
     );
   }
