@@ -28,6 +28,7 @@ class _PageOneState extends State<PageOne> {
     final List<Meeting> meetings = <Meeting>[];
     final DateTime today = DateTime.now();
 
+    // Use simple colors that work in both light and dark mode
     meetings.add(
       Meeting(
         id: '1',
@@ -36,7 +37,7 @@ class _PageOneState extends State<PageOne> {
         description: 'Review team objectives and KPIs for Q4',
         from: DateTime(today.year, today.month, today.day, 10, 0),
         to: DateTime(today.year, today.month, today.day, 11, 0),
-        background: Color(0xFF0F8644),
+        background: Color(0xFF6750A4), // Purple - primary-like
       ),
     );
 
@@ -48,7 +49,7 @@ class _PageOneState extends State<PageOne> {
         description: 'Plan next sprint tasks and assignments',
         from: DateTime(today.year, today.month, today.day, 14, 0),
         to: DateTime(today.year, today.month, today.day, 15, 0),
-        background: Color(0xFF3F51B5),
+        background: Color(0xFF625B71), // Gray-purple - secondary-like
       ),
     );
 
@@ -60,7 +61,7 @@ class _PageOneState extends State<PageOne> {
         description: 'Review team members code contributions',
         from: DateTime(today.year, today.month, today.day + 1, 11, 0),
         to: DateTime(today.year, today.month, today.day + 1, 12, 0),
-        background: Color(0xFFFF6B6B),
+        background: Color(0xFF7D5260), // Mauve - tertiary-like
       ),
     );
 
@@ -72,7 +73,7 @@ class _PageOneState extends State<PageOne> {
         description: 'Review binary trees and graph algorithms',
         from: DateTime(today.year, today.month, today.day + 2, 16, 0),
         to: DateTime(today.year, today.month, today.day + 2, 18, 0),
-        background: Color(0xFFE91E63),
+        background: Color(0xFF6750A4), // Purple
       ),
     );
 
@@ -84,7 +85,7 @@ class _PageOneState extends State<PageOne> {
         description: 'Machine learning fundamentals workshop',
         from: DateTime(today.year, today.month, today.day - 2, 9, 0),
         to: DateTime(today.year, today.month, today.day - 2, 12, 0),
-        background: Color(0xFF009688),
+        background: Color(0xFF625B71), // Gray-purple
       ),
     );
 
@@ -96,7 +97,7 @@ class _PageOneState extends State<PageOne> {
         description: 'Submit ER diagram and normalization project',
         from: DateTime(today.year, today.month, today.day + 5, 23, 59),
         to: DateTime(today.year, today.month, today.day + 5, 23, 59),
-        background: Color(0xFFD32F2F),
+        background: Color(0xFFB3261E), // Red - error-like
       ),
     );
 
@@ -121,7 +122,7 @@ class _PageOneState extends State<PageOne> {
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   IconButton(
@@ -286,7 +287,7 @@ class _PageOneState extends State<PageOne> {
     final TextEditingController descriptionController = TextEditingController();
     DateTime selectedDate = DateTime.now();
     TimeOfDay selectedTime = TimeOfDay.now();
-    Color selectedColor = Color(0xFF3F51B5);
+    Color selectedColor = Color(0xFF6750A4); // Default purple
 
     showDialog(
       context: context,
@@ -361,12 +362,10 @@ class _PageOneState extends State<PageOne> {
                   spacing: 8,
                   children:
                       [
-                        Color(0xFF3F51B5),
-                        Color(0xFF0F8644),
-                        Color(0xFFE91E63),
-                        Color(0xFFFF6B6B),
-                        Color(0xFF009688),
-                        Color(0xFF7B1FA2),
+                        Color(0xFF6750A4), // Primary purple
+                        Color(0xFF625B71), // Secondary gray-purple
+                        Color(0xFF7D5260), // Tertiary mauve
+                        Color(0xFFB3261E), // Error red
                       ].map((color) {
                         return GestureDetector(
                           onTap: () =>
@@ -378,9 +377,16 @@ class _PageOneState extends State<PageOne> {
                               color: color,
                               shape: BoxShape.circle,
                               border: selectedColor == color
-                                  ? Border.all(color: Colors.black, width: 3)
+                                  ? Border.all(color: Colors.white, width: 3)
                                   : null,
                             ),
+                            child: selectedColor == color
+                                ? Icon(
+                                    Icons.check,
+                                    color: Colors.white,
+                                    size: 18,
+                                  )
+                                : null,
                           ),
                         );
                       }).toList(),

@@ -6,11 +6,13 @@ class TaskViewPage extends StatefulWidget {
   final DateTime selectedDate;
   final List<Meeting> allTasks;
   final Function(Meeting) onDeleteTask;
+  final Function(int)? onNavigateToPage;
 
   TaskViewPage({
     required this.selectedDate,
     required this.allTasks,
     required this.onDeleteTask,
+    this.onNavigateToPage,
   });
 
   @override
@@ -18,198 +20,118 @@ class TaskViewPage extends StatefulWidget {
 }
 
 class _TaskViewPageState extends State<TaskViewPage> {
-  late List<Meeting> beforeTasks;
-  late List<Meeting> onDateTasks;
-  late List<Meeting> afterTasks;
-
-  final ScrollController _scrollController = ScrollController();
-  final GlobalKey _selectedDateKey = GlobalKey();
+  late List<Meeting> todayTasks;
 
   @override
   void initState() {
     super.initState();
-    _organizeTasks();
-
-    // Scroll to selected date after build
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToSelectedDate();
-    });
+    _loadTodayTasks();
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _organizeTasks() {
+  void _loadTodayTasks() {
     final selectedDateOnly = DateTime(
       widget.selectedDate.year,
       widget.selectedDate.month,
       widget.selectedDate.day,
     );
 
-    beforeTasks = [];
-    onDateTasks = [];
-    afterTasks = [];
-
-    for (var task in widget.allTasks) {
+    todayTasks = widget.allTasks.where((task) {
       final taskDate = DateTime(task.from.year, task.from.month, task.from.day);
+      return taskDate.isAtSameMomentAs(selectedDateOnly);
+    }).toList();
 
-      if (taskDate.isBefore(selectedDateOnly)) {
-        beforeTasks.add(task);
-      } else if (taskDate.isAtSameMomentAs(selectedDateOnly)) {
-        onDateTasks.add(task);
-      } else {
-        afterTasks.add(task);
-      }
-    }
-
-    beforeTasks.sort((a, b) => b.from.compareTo(a.from));
-    onDateTasks.sort((a, b) => a.from.compareTo(b.from));
-    afterTasks.sort((a, b) => a.from.compareTo(b.from));
+    todayTasks.sort((a, b) => a.from.compareTo(b.from));
   }
 
-  void _scrollToSelectedDate() {
-    try {
-      final context = _selectedDateKey.currentContext;
-      if (context != null) {
-        Scrollable.ensureVisible(
-          context,
-          duration: Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
-          alignment: 0.1, // Position at 10% from top
-        );
-      }
-    } catch (e) {
-      print('Scroll error: $e');
-    }
-  }
-
-  Map<DateTime, List<Meeting>> _groupTasksByDate(List<Meeting> tasks) {
-    Map<DateTime, List<Meeting>> grouped = {};
-    for (var task in tasks) {
-      final dateOnly = DateTime(task.from.year, task.from.month, task.from.day);
-      if (!grouped.containsKey(dateOnly)) {
-        grouped[dateOnly] = [];
-      }
-      grouped[dateOnly]!.add(task);
-    }
-    return grouped;
+  void _toggleTaskCompletion(Meeting task) {
+    setState(() {
+      task.isCompleted = !task.isCompleted;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+      backgroundColor: colorScheme.surfaceContainerLow,
+      appBar: AppBar(
+        backgroundColor: colorScheme.surfaceContainerLow,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              DateFormat('EEEE').format(widget.selectedDate),
+              style: TextStyle(
+                fontSize: 14,
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+            Text(
+              DateFormat('MMMM dd, yyyy').format(widget.selectedDate),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onSurface,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          Container(
+            margin: EdgeInsets.only(right: 16),
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              '${todayTasks.where((t) => t.isCompleted).length}/${todayTasks.length}',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onPrimaryContainer,
+              ),
+            ),
+          ),
+        ],
+      ),
       body: Stack(
         children: [
-          SafeArea(
-            child: Column(
-              children: [
-                // Header
-                Container(
-                  padding: EdgeInsets.all(8),
-                  color: Theme.of(context).colorScheme.surfaceContainerLow,
-                  child: Row(
+          todayTasks.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      IconButton(
-                        icon: Icon(Icons.arrow_back, size: 28),
-                        onPressed: () => Navigator.pop(context),
+                      Icon(
+                        Icons.event_available,
+                        size: 80,
+                        color: colorScheme.outlineVariant,
                       ),
-                      SizedBox(width: 6),
+                      SizedBox(height: 16),
                       Text(
-                        'Task View',
+                        'No tasks for this day',
                         style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
                   ),
+                )
+              : ListView.builder(
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 120),
+                  itemCount: todayTasks.length,
+                  itemBuilder: (context, index) {
+                    return _buildTaskItem(todayTasks[index], colorScheme);
+                  },
                 ),
-
-                // Task list
-                Expanded(
-                  child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 15),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.shadow.withOpacity(0.1),
-                          blurRadius: 15,
-                          offset: Offset(0, 5),
-                        ),
-                      ],
-                    ),
-                    child: ListView(
-                      controller: _scrollController,
-                      children: [
-                        // Previous tasks
-                        if (beforeTasks.isNotEmpty) ...[
-                          _buildHeader(
-                            'Previous Tasks',
-                            Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                          ..._buildGroupedTasks(beforeTasks),
-                          SizedBox(height: 24),
-                        ],
-
-                        // Current day tasks - with scroll key
-                        Container(
-                          key: _selectedDateKey,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildHeader(
-                                DateFormat(
-                                  'EEEE, MMM dd, yyyy',
-                                ).format(widget.selectedDate),
-                                Theme.of(context).colorScheme.primary,
-                              ),
-                              if (onDateTasks.isEmpty)
-                                Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.all(24),
-                                    child: Text(
-                                      'No tasks for this day',
-                                      style: TextStyle(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                  ),
-                                )
-                              else
-                                ...onDateTasks.map(
-                                  (task) =>
-                                      _buildTaskCard(task, showDate: false),
-                                ),
-                            ],
-                          ),
-                        ),
-                        SizedBox(height: 24),
-
-                        // Upcoming tasks
-                        if (afterTasks.isNotEmpty) ...[
-                          _buildHeader(
-                            'Upcoming Tasks',
-                            Theme.of(context).colorScheme.tertiary,
-                          ),
-                          ..._buildGroupedTasks(afterTasks),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
 
           // Floating Navigation Bar
           Positioned(
@@ -218,11 +140,11 @@ class _TaskViewPageState extends State<TaskViewPage> {
             right: 20,
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(30),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black26,
+                    color: colorScheme.shadow.withOpacity(0.2),
                     blurRadius: 15,
                     offset: Offset(0, 5),
                   ),
@@ -231,26 +153,29 @@ class _TaskViewPageState extends State<TaskViewPage> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(30),
                 child: BottomNavigationBar(
-                  backgroundColor: Colors.white,
+                  backgroundColor: colorScheme.surface,
                   currentIndex: 0,
                   elevation: 0,
+                  selectedItemColor: colorScheme.primary,
+                  unselectedItemColor: colorScheme.onSurfaceVariant,
                   onTap: (index) {
-                    // Pass the selected index back to main screen
-                    Navigator.pop(context, index);
+                    if (widget.onNavigateToPage != null) {
+                      widget.onNavigateToPage!(index);
+                    }
+                    Navigator.pop(context);
                   },
-
                   items: [
                     BottomNavigationBarItem(
                       icon: Icon(Icons.home),
-                      label: 'Page 1',
+                      label: 'Calendar',
                     ),
                     BottomNavigationBarItem(
                       icon: Icon(Icons.explore),
-                      label: 'Page 2',
+                      label: 'Explore',
                     ),
                     BottomNavigationBarItem(
                       icon: Icon(Icons.person),
-                      label: 'Page 3',
+                      label: 'Profile',
                     ),
                   ],
                 ),
@@ -262,129 +187,155 @@ class _TaskViewPageState extends State<TaskViewPage> {
     );
   }
 
-  Widget _buildHeader(String title, Color color) {
-    return Padding(
-      padding: EdgeInsets.only(top: 8, bottom: 12),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: color,
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _buildGroupedTasks(List<Meeting> tasks) {
-    final grouped = _groupTasksByDate(tasks);
-    final sortedDates = grouped.keys.toList()..sort();
-
-    List<Widget> widgets = [];
-    for (var date in sortedDates) {
-      widgets.add(
-        Padding(
-          padding: EdgeInsets.only(top: 12, bottom: 8, left: 4),
-          child: Text(
-            DateFormat('EEEE, MMM dd, yyyy').format(date),
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-      );
-
-      for (var task in grouped[date]!) {
-        widgets.add(_buildTaskCard(task, showDate: false));
-      }
-    }
-
-    return widgets;
-  }
-
-  Widget _buildTaskCard(Meeting task, {bool showDate = true}) {
-    return Container(
-      margin: EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: task.background.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: task.background, width: 2),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _showDetails(task),
+  Widget _buildTaskItem(Meeting task, ColorScheme colorScheme) {
+    return Dismissible(
+      key: Key(task.id ?? DateTime.now().millisecondsSinceEpoch.toString()),
+      background: Container(
+        margin: EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: colorScheme.primary,
           borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Container(
-                  width: 4,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: task.background,
-                    borderRadius: BorderRadius.circular(2),
+        ),
+        alignment: Alignment.centerLeft,
+        padding: EdgeInsets.only(left: 20),
+        child: Icon(Icons.check_circle, color: Colors.white, size: 32),
+      ),
+      secondaryBackground: Container(
+        margin: EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: colorScheme.primary,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        alignment: Alignment.centerRight,
+        padding: EdgeInsets.only(right: 20),
+        child: Icon(Icons.check_circle, color: Colors.white, size: 32),
+      ),
+      confirmDismiss: (direction) async {
+        _toggleTaskCompletion(task);
+        return false; // Don't actually dismiss, just toggle
+      },
+      child: Container(
+        margin: EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: task.isCompleted
+              ? colorScheme.surfaceContainerHighest.withOpacity(0.5)
+              : colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: task.isCompleted
+                ? colorScheme.outlineVariant
+                : colorScheme.outline.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _showDetails(task, colorScheme),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  // Checkbox
+                  InkWell(
+                    onTap: () => _toggleTaskCompletion(task),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: task.isCompleted
+                              ? colorScheme.primary
+                              : colorScheme.outline,
+                          width: 2,
+                        ),
+                        color: task.isCompleted
+                            ? colorScheme.primary
+                            : Colors.transparent,
+                      ),
+                      child: task.isCompleted
+                          ? Icon(
+                              Icons.check,
+                              size: 16,
+                              color: colorScheme.onPrimary,
+                            )
+                          : null,
+                    ),
                   ),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        task.title ?? 'Untitled',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: task.background,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          task.category ?? 'No Category',
-                          style: TextStyle(fontSize: 12, color: Colors.white),
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.access_time,
-                            size: 14,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
+                  SizedBox(width: 16),
+
+                  // Task info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          task.title ?? 'Untitled',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: task.isCompleted
+                                ? colorScheme.onSurfaceVariant
+                                : colorScheme.onSurface,
+                            decoration: task.isCompleted
+                                ? TextDecoration.lineThrough
+                                : null,
+                            decorationColor: colorScheme.onSurfaceVariant,
+                            decorationThickness: 2,
                           ),
-                          SizedBox(width: 4),
-                          Text(
-                            showDate
-                                ? DateFormat(
-                                    'MMM dd, hh:mm a',
-                                  ).format(task.from)
-                                : DateFormat('hh:mm a').format(task.from),
-                            style: TextStyle(fontSize: 13, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ],
+                        ),
+                        SizedBox(height: 8),
+                        Row(
+                          children: [
+                            // Category
+                            Icon(
+                              Icons.label_outline,
+                              size: 14,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              task.category ?? 'No Category',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            SizedBox(width: 16),
+                            // Time
+                            Icon(
+                              Icons.access_time,
+                              size: 14,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              DateFormat('hh:mm a').format(task.from),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                IconButton(
-                  icon: Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: () => _deleteTask(task),
-                ),
-              ],
+
+                  // Delete button
+                  IconButton(
+                    icon: Icon(
+                      Icons.delete_outline,
+                      color: colorScheme.error,
+                      size: 20,
+                    ),
+                    onPressed: () => _deleteTask(task),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -392,43 +343,74 @@ class _TaskViewPageState extends State<TaskViewPage> {
     );
   }
 
-  void _showDetails(Meeting task) {
+  void _showDetails(Meeting task, ColorScheme colorScheme) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(task.title ?? 'Untitled'),
+        title: Text(
+          task.title ?? 'Untitled',
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.category, size: 18),
+                Icon(
+                  Icons.label_outline,
+                  size: 18,
+                  color: colorScheme.onSurfaceVariant,
+                ),
                 SizedBox(width: 8),
-                Text(task.category ?? 'No Category'),
-              ],
-            ),
-            SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.access_time, size: 18),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    DateFormat('MMM dd, yyyy - hh:mm a').format(task.from),
-                  ),
+                Text(
+                  task.category ?? 'No Category',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
             SizedBox(height: 12),
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.description, size: 18),
+                Icon(
+                  Icons.access_time,
+                  size: 18,
+                  color: colorScheme.onSurfaceVariant,
+                ),
                 SizedBox(width: 8),
-                Expanded(child: Text(task.description ?? 'No description')),
+                Expanded(
+                  child: Text(DateFormat('MMM dd, yyyy').format(task.from)),
+                ),
               ],
             ),
+            Row(
+              children: [
+                SizedBox(width: 8),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    child: Text(DateFormat('hh:mm a').format(task.from)),
+                  ),
+                ),
+              ],
+            ),
+            if (task.description != null && task.description!.isNotEmpty) ...[
+              SizedBox(height: 12),
+              Divider(),
+              SizedBox(height: 8),
+              Text(
+                'Description',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                task.description!,
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
+              ),
+            ],
           ],
         ),
         actions: [

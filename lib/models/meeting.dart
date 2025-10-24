@@ -10,6 +10,7 @@ class Meeting {
     required this.to,
     required this.background,
     this.isAllDay = false,
+    this.isCompleted = false, // Add this
   });
 
   String? id;
@@ -20,6 +21,7 @@ class Meeting {
   DateTime to;
   Color background;
   bool isAllDay;
+  bool isCompleted; // Add this
 
   Map<String, dynamic> toJson() {
     return {
@@ -31,6 +33,7 @@ class Meeting {
       'to': to.toIso8601String(),
       'color': background.value,
       'isAllDay': isAllDay,
+      'isCompleted': isCompleted, // Add this
     };
   }
 
@@ -50,6 +53,7 @@ class Meeting {
           ? Color(json['color'] as int)
           : Color(0xFF3F51B5),
       isAllDay: json['isAllDay'] as bool? ?? false,
+      isCompleted: json['isCompleted'] as bool? ?? false, // Add this
     );
   }
 }
