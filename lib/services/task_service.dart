@@ -2,11 +2,94 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/task_model.dart';
 import '../models/meeting.dart';
 import 'package:flutter/material.dart';
+import 'local_storage_service.dart';
 
 class TaskService {
   final SupabaseClient _supabase = Supabase.instance.client;
+  final LocalStorageService _localStorage = LocalStorageService();
 
-  // Create personal task
+  // Get user's tasks from Supabase
+  Future<List<Meeting>> getUserTasks() async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return [];
+
+    try {
+      // Personal tasks
+      final personalTasks = await _supabase
+          .from('tasks')
+          .select()
+          .eq('created_by', userId)
+          .isFilter('class_id', null);
+
+      // Class tasks assigned to user
+      final assignedTasks = await _supabase
+          .from('task_assignments')
+          .select('tasks(*)')
+          .eq('student_id', userId);
+
+      List<Meeting> meetings = [];
+
+      // Convert personal tasks
+      for (var task in personalTasks) {
+        meetings.add(_taskToMeeting(task));
+      }
+
+      // Convert assigned tasks
+      for (var item in assignedTasks) {
+        if (item['tasks'] != null) {
+          meetings.add(_taskToMeeting(item['tasks']));
+        }
+      }
+
+      return meetings;
+    } catch (e) {
+      print('Error fetching tasks: $e');
+      return [];
+    }
+  }
+
+  // Get ALL tasks (Supabase + Local Storage)
+  Future<List<Meeting>> getAllUserTasks() async {
+    List<Meeting> allTasks = [];
+
+    // 1. Get Supabase tasks
+    try {
+      final supabaseTasks = await getUserTasks();
+      allTasks.addAll(supabaseTasks);
+    } catch (e) {
+      print('Error loading Supabase tasks: $e');
+    }
+
+    // 2. Get local tasks
+    try {
+      final localTasks = await _localStorage.getLocalMeetings();
+      for (var task in localTasks) {
+        task.isLocal = true;
+      }
+      allTasks.addAll(localTasks);
+    } catch (e) {
+      print('Error loading local tasks: $e');
+    }
+
+    return allTasks;
+  }
+
+  // Convert task to Meeting
+  Meeting _taskToMeeting(Map<String, dynamic> task) {
+    return Meeting(
+      id: task['id'],
+      title: task['title'],
+      description: task['description'],
+      category: task['category'] ?? 'Task',
+      from: DateTime.parse(task['due_date']),
+      to: DateTime.parse(task['due_date']).add(Duration(hours: 1)),
+      background: Color(0xFF6750A4),
+      isCompleted: task['is_completed'] ?? false,
+      isLocal: false,
+    );
+  }
+
+  // Create personal task (for students)
   Future<void> createPersonalTask(Meeting task) async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) throw Exception('Not authenticated');
@@ -16,13 +99,17 @@ class TaskService {
       'description': task.description,
       'category': task.category,
       'due_date': task.from.toIso8601String(),
-      'color': '#${task.background.value.toRadixString(16).substring(2)}',
       'created_by': userId,
-      'is_personal': true,
+      'class_id': null,
     });
   }
 
-  // Create class task (for representatives)
+  // Create local task (for representative's personal tasks)
+  Future<void> createLocalTask(Meeting task) async {
+    await _localStorage.saveLocalTask(task);
+  }
+
+  // Create class task and assign to students
   Future<void> createClassTask({
     required Meeting task,
     required String classId,
@@ -31,101 +118,58 @@ class TaskService {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) throw Exception('Not authenticated');
 
-    // Insert task
-    final taskResponse = await _supabase
+    // 1. Create the task
+    final response = await _supabase
         .from('tasks')
         .insert({
           'title': task.title,
           'description': task.description,
           'category': task.category,
           'due_date': task.from.toIso8601String(),
-          'color': '#${task.background.value.toRadixString(16).substring(2)}',
           'created_by': userId,
           'class_id': classId,
-          'is_personal': false,
         })
         .select()
         .single();
 
-    // Assign to students
-    for (String studentId in studentIds) {
-      await _supabase.from('task_assignments').insert({
-        'task_id': taskResponse['id'],
-        'student_id': studentId,
-      });
-    }
+    final taskId = response['id'];
+
+    // 2. Assign to students
+    final assignments = studentIds
+        .map((studentId) => {'task_id': taskId, 'student_id': studentId})
+        .toList();
+
+    await _supabase.from('task_assignments').insert(assignments);
   }
 
-  // Get user tasks (personal + assigned)
-  Future<List<Meeting>> getUserTasks() async {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return [];
-
-    // Get personal tasks
-    final personalTasks = await _supabase
-        .from('tasks')
-        .select()
-        .eq('created_by', userId)
-        .eq('is_personal', true);
-
-    // Get assigned tasks
-    final assignedTasks = await _supabase
-        .from('task_assignments')
-        .select('*, tasks(*)')
-        .eq('student_id', userId);
-
-    List<Meeting> meetings = [];
-
-    // Convert personal tasks
-    for (var task in personalTasks) {
-      meetings.add(_convertToMeeting(task, false));
-    }
-
-    // Convert assigned tasks
-    for (var assignment in assignedTasks) {
-      final task = assignment['tasks'];
-      meetings.add(
-        _convertToMeeting(task, assignment['is_completed'] ?? false),
-      );
-    }
-
-    return meetings;
-  }
-
-  // Toggle task completion
-  Future<void> toggleTaskCompletion(String taskId, bool isCompleted) async {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return;
-
-    await _supabase
-        .from('task_assignments')
-        .update({
-          'is_completed': isCompleted,
-          'completed_at': isCompleted ? DateTime.now().toIso8601String() : null,
-        })
-        .eq('task_id', taskId)
-        .eq('student_id', userId);
-  }
-
-  // Delete task
+  // Delete task from Supabase
   Future<void> deleteTask(String taskId) async {
     await _supabase.from('tasks').delete().eq('id', taskId);
   }
 
-  // Convert task to Meeting model
-  Meeting _convertToMeeting(Map<String, dynamic> task, bool isCompleted) {
-    final colorHex = task['color'] ?? 'FF6750A4';
-    final colorValue = int.parse(colorHex.replaceAll('#', 'FF'), radix: 16);
+  // Delete task (local or Supabase)
+  Future<void> deleteTaskAny(Meeting task) async {
+    if (task.isLocal) {
+      await _localStorage.deleteLocalTask(task.id!);
+    } else {
+      await deleteTask(task.id!);
+    }
+  }
 
-    return Meeting(
-      id: task['id'],
-      title: task['title'],
-      category: task['category'],
-      description: task['description'],
-      from: DateTime.parse(task['due_date']),
-      to: DateTime.parse(task['due_date']).add(Duration(hours: 1)),
-      background: Color(colorValue),
-      isCompleted: isCompleted,
-    );
+  // Toggle task completion in Supabase
+  Future<void> toggleTaskCompletion(String taskId, bool isCompleted) async {
+    await _supabase
+        .from('tasks')
+        .update({'is_completed': isCompleted})
+        .eq('id', taskId);
+  }
+
+  // Toggle completion (local or Supabase)
+  Future<void> toggleTaskCompletionAny(Meeting task) async {
+    if (task.isLocal) {
+      await _localStorage.updateLocalTaskCompletion(task.id!, task.isCompleted);
+    } else {
+      await toggleTaskCompletion(task.id!, task.isCompleted);
+    }
   }
 }

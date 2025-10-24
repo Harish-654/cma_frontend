@@ -1,32 +1,83 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/meeting.dart';
+import '../widgets/add_task_dialog.dart';
+import '../widgets/add_class_task_dialog.dart';
+import '../models/user_model.dart';
+import '../services/task_service.dart';
+import '../services/class_service.dart';
+import '../main.dart';
 
 class TaskViewPage extends StatefulWidget {
   final DateTime selectedDate;
   final List<Meeting> allTasks;
   final Function(Meeting) onDeleteTask;
   final Function(int)? onNavigateToPage;
+  final bool isRepresentative;
 
   TaskViewPage({
     required this.selectedDate,
     required this.allTasks,
     required this.onDeleteTask,
     this.onNavigateToPage,
+    this.isRepresentative = false,
   });
 
   @override
   State<TaskViewPage> createState() => _TaskViewPageState();
 }
 
-class _TaskViewPageState extends State<TaskViewPage> {
+class _TaskViewPageState extends State<TaskViewPage>
+    with SingleTickerProviderStateMixin {
   late List<Meeting> todayTasks;
   String? expandedTaskId;
+  bool isSpeedDialOpen = false;
+  late AnimationController _animationController;
+  late Animation<double> _rotationAnimation;
+  late Animation<double> _forYouSlideAnimation;
+  late Animation<double> _forClassSlideAnimation;
+
+  final TaskService _taskService = TaskService();
+  final ClassService _classService = ClassService();
 
   @override
   void initState() {
     super.initState();
     _loadTodayTasks();
+
+    _animationController = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 300),
+    );
+
+    _rotationAnimation = Tween<double>(begin: 0.0, end: 0.125).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+
+    _forYouSlideAnimation = Tween<double>(begin: 0.0, end: -64.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+    );
+
+    _forClassSlideAnimation = Tween<double>(begin: 0.0, end: -128.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  void _toggleSpeedDial() {
+    setState(() {
+      isSpeedDialOpen = !isSpeedDialOpen;
+      if (isSpeedDialOpen) {
+        _animationController.forward();
+      } else {
+        _animationController.reverse();
+      }
+    });
   }
 
   void _loadTodayTasks() {
@@ -45,12 +96,17 @@ class _TaskViewPageState extends State<TaskViewPage> {
   }
 
   void _toggleTaskCompletion(Meeting task) {
+    if (!mounted) return; // Add check
+
     setState(() {
       task.isCompleted = !task.isCompleted;
     });
   }
 
+  // Update _toggleTaskExpansion
   void _toggleTaskExpansion(Meeting task) {
+    if (!mounted) return; // Add check
+
     setState(() {
       if (expandedTaskId == task.id) {
         expandedTaskId = null;
@@ -60,15 +116,218 @@ class _TaskViewPageState extends State<TaskViewPage> {
     });
   }
 
+  // For Students - Save to Supabase
+  // Update _addPersonalTask
+  void _addPersonalTask() async {
+    if (!mounted) return; // Add at start
+    _toggleSpeedDial();
+
+    showDialog(
+      context: context,
+      builder: (context) => AddTaskDialog(
+        selectedDate: widget.selectedDate,
+        onTaskCreated: (task) async {
+          try {
+            await _taskService.createPersonalTask(task);
+
+            if (!mounted) return; // Check before setState
+
+            setState(() {
+              todayTasks.add(task);
+              todayTasks.sort((a, b) => a.from.compareTo(b.from));
+            });
+
+            if (mounted) {
+              // Check before using context
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Task created successfully!'),
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                ),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              // Check before using context
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error: ${e.toString()}'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
+        },
+      ),
+    );
+  }
+
+  // For Representatives "For You" - Save to Local Storage
+  void _addRepresentativePersonalTask() async {
+    if (!mounted) return; // Add at start
+    _toggleSpeedDial();
+
+    showDialog(
+      context: context,
+      builder: (context) => AddTaskDialog(
+        selectedDate: widget.selectedDate,
+        onTaskCreated: (task) async {
+          try {
+            task.isLocal = true;
+            await _taskService.createLocalTask(task);
+
+            if (!mounted) return; // Check before setState
+
+            setState(() {
+              todayTasks.add(task);
+              todayTasks.sort((a, b) => a.from.compareTo(b.from));
+            });
+
+            if (mounted) {
+              // Check before using context
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Personal task created locally!'),
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                ),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              // Check before using context
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error: ${e.toString()}'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
+        },
+      ),
+    );
+  }
+
+  // For Representatives "For Class" - Save to Supabase
+  void _addClassTask() async {
+    if (!mounted) return; // Add at start
+    _toggleSpeedDial();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final userId = supabase.auth.currentUser?.id;
+
+      if (userId == null) {
+        if (mounted) Navigator.pop(context);
+        throw Exception('Not authenticated');
+      }
+
+      final classes = await _classService.getMyClasses();
+
+      if (!mounted) return; // Check before using context
+
+      if (classes.isEmpty) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'You haven\'t created any classes yet. Create one in Profile.',
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+
+      final classId = classes[0].id;
+      final students = await _classService.getClassMembers(classId);
+
+      if (!mounted) return; // Check before using context
+
+      Navigator.pop(context);
+
+      if (students.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'No students in your class yet. Share code: ${classes[0].classCode}',
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+
+      showDialog(
+        context: context,
+        builder: (context) => AddClassTaskDialog(
+          selectedDate: widget.selectedDate,
+          classStudents: students,
+          onTaskCreated: (task, studentIds) async {
+            try {
+              await _taskService.createClassTask(
+                task: task,
+                classId: classId,
+                studentIds: studentIds,
+              );
+
+              if (mounted) {
+                // Check before using context
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Task sent to ${studentIds.length} students!',
+                    ),
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                  ),
+                );
+              }
+            } catch (e) {
+              if (mounted) {
+                // Check before using context
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error: ${e.toString()}'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            }
+          },
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        // Check before using context
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: colorScheme.background,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: colorScheme.background,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
+          icon: Icon(Icons.arrow_back, color: colorScheme.onBackground),
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(
@@ -79,7 +338,7 @@ class _TaskViewPageState extends State<TaskViewPage> {
               style: TextStyle(
                 fontSize: 14,
                 fontFamily: 'SF Pro Text',
-                color: const Color.fromARGB(255, 121, 121, 121),
+                color: colorScheme.onSurfaceVariant,
                 fontWeight: FontWeight.normal,
               ),
             ),
@@ -89,7 +348,7 @@ class _TaskViewPageState extends State<TaskViewPage> {
                 fontSize: 20,
                 fontFamily: 'SF Pro Display',
                 fontWeight: FontWeight.bold,
-                color: const Color.fromARGB(255, 185, 185, 185),
+                color: colorScheme.onBackground,
               ),
             ),
           ],
@@ -99,7 +358,7 @@ class _TaskViewPageState extends State<TaskViewPage> {
             margin: EdgeInsets.only(right: 16),
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.teal,
+              color: colorScheme.primary,
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
@@ -108,7 +367,7 @@ class _TaskViewPageState extends State<TaskViewPage> {
                 fontSize: 14,
                 fontFamily: 'SF Pro Text',
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: colorScheme.onPrimary,
               ),
             ),
           ),
@@ -124,7 +383,7 @@ class _TaskViewPageState extends State<TaskViewPage> {
                       Icon(
                         Icons.event_available,
                         size: 80,
-                        color: Colors.white38,
+                        color: colorScheme.surfaceVariant,
                       ),
                       SizedBox(height: 16),
                       Text(
@@ -132,7 +391,7 @@ class _TaskViewPageState extends State<TaskViewPage> {
                         style: TextStyle(
                           fontSize: 18,
                           fontFamily: 'SF Pro Text',
-                          color: Colors.white60,
+                          color: colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -146,7 +405,16 @@ class _TaskViewPageState extends State<TaskViewPage> {
                   },
                 ),
 
-          // Floating Navigation Bar
+          // Backdrop
+          if (isSpeedDialOpen)
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: _toggleSpeedDial,
+                child: Container(color: Colors.black.withOpacity(0.7)),
+              ),
+            ),
+
+          // Navigation Bar
           SafeArea(
             child: Align(
               alignment: Alignment.bottomCenter,
@@ -155,11 +423,11 @@ class _TaskViewPageState extends State<TaskViewPage> {
                 child: Container(
                   width: MediaQuery.of(context).size.width - 40,
                   decoration: BoxDecoration(
-                    color: Colors.grey[900],
+                    color: colorScheme.surface,
                     borderRadius: BorderRadius.circular(30),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
+                        color: colorScheme.primary.withOpacity(0.2),
                         blurRadius: 15,
                         offset: Offset(0, 5),
                       ),
@@ -168,11 +436,11 @@ class _TaskViewPageState extends State<TaskViewPage> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(30),
                     child: BottomNavigationBar(
-                      backgroundColor: Colors.grey[900],
+                      backgroundColor: colorScheme.surface,
                       currentIndex: 0,
                       elevation: 0,
-                      selectedItemColor: Colors.teal,
-                      unselectedItemColor: Colors.white60,
+                      selectedItemColor: colorScheme.primary,
+                      unselectedItemColor: colorScheme.onSurfaceVariant,
                       type: BottomNavigationBarType.fixed,
                       onTap: (index) {
                         if (widget.onNavigateToPage != null) {
@@ -200,18 +468,180 @@ class _TaskViewPageState extends State<TaskViewPage> {
               ),
             ),
           ),
+
+          // Speed Dial FAB
+          Positioned(
+            right: 20,
+            bottom: 100,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (widget.isRepresentative)
+                  AnimatedBuilder(
+                    animation: _forClassSlideAnimation,
+                    builder: (context, child) {
+                      return Transform.translate(
+                        offset: Offset(0, _forClassSlideAnimation.value),
+                        child: Opacity(
+                          opacity: isSpeedDialOpen ? 1.0 : 0.0,
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceVariant,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            'For Class',
+                            style: TextStyle(
+                              color: colorScheme.onSurface,
+                              fontSize: 12,
+                              fontFamily: 'SF Pro Text',
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        Material(
+                          elevation: 4,
+                          shape: CircleBorder(),
+                          color: Colors.purple[400],
+                          child: InkWell(
+                            customBorder: CircleBorder(),
+                            onTap: _addClassTask,
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              alignment: Alignment.center,
+                              child: Icon(
+                                Icons.group,
+                                size: 22,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                if (widget.isRepresentative) SizedBox(height: 16),
+
+                AnimatedBuilder(
+                  animation: _forYouSlideAnimation,
+                  builder: (context, child) {
+                    return Transform.translate(
+                      offset: Offset(0, _forYouSlideAnimation.value),
+                      child: Opacity(
+                        opacity: isSpeedDialOpen ? 1.0 : 0.0,
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceVariant,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          'For You',
+                          style: TextStyle(
+                            color: colorScheme.onSurface,
+                            fontSize: 12,
+                            fontFamily: 'SF Pro Text',
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 10),
+                      Material(
+                        elevation: 4,
+                        shape: CircleBorder(),
+                        color: colorScheme.primary,
+                        child: InkWell(
+                          customBorder: CircleBorder(),
+                          onTap: widget.isRepresentative
+                              ? _addRepresentativePersonalTask
+                              : _addPersonalTask,
+                          child: Container(
+                            width: 48,
+                            height: 48,
+                            alignment: Alignment.center,
+                            child: Icon(
+                              Icons.person,
+                              size: 22,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                SizedBox(height: 16),
+
+                AnimatedBuilder(
+                  animation: _rotationAnimation,
+                  builder: (context, child) {
+                    return Transform.rotate(
+                      angle: _rotationAnimation.value * 2 * 3.14159,
+                      child: Material(
+                        elevation: 6,
+                        shape: CircleBorder(),
+                        color: colorScheme.primary,
+                        child: InkWell(
+                          customBorder: CircleBorder(),
+                          onTap: widget.isRepresentative
+                              ? _toggleSpeedDial
+                              : _addPersonalTask,
+                          child: Container(
+                            width: 56,
+                            height: 56,
+                            alignment: Alignment.center,
+                            child: Icon(
+                              Icons.add,
+                              size: 28,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildTaskItem(Meeting task) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Dismissible(
       key: Key(task.id ?? DateTime.now().millisecondsSinceEpoch.toString()),
       background: Container(
         margin: EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: Colors.teal,
+          color: colorScheme.primary,
           borderRadius: BorderRadius.circular(16),
         ),
         alignment: Alignment.centerLeft,
@@ -221,7 +651,7 @@ class _TaskViewPageState extends State<TaskViewPage> {
       secondaryBackground: Container(
         margin: EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: Colors.teal,
+          color: colorScheme.primary,
           borderRadius: BorderRadius.circular(16),
         ),
         alignment: Alignment.centerRight,
@@ -230,17 +660,19 @@ class _TaskViewPageState extends State<TaskViewPage> {
       ),
       confirmDismiss: (direction) async {
         _toggleTaskCompletion(task);
-        return false; // Don't actually dismiss, just toggle
+        return false;
       },
       child: Container(
         margin: EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: task.isCompleted
-              ? Colors.grey[900]!.withOpacity(0.5)
-              : Colors.grey[900],
+              ? colorScheme.surfaceVariant.withOpacity(0.5)
+              : colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: task.isCompleted ? Colors.grey[700]! : Colors.grey[800]!,
+            color: task.isCompleted
+                ? colorScheme.outline.withOpacity(0.5)
+                : colorScheme.outline.withOpacity(0.3),
             width: 1,
           ),
         ),
@@ -266,12 +698,13 @@ class _TaskViewPageState extends State<TaskViewPage> {
   }
 
   Widget _buildCollapsedTaskCard(Meeting task) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return AnimatedOpacity(
       duration: Duration(milliseconds: 300),
       opacity: 1.0,
       child: Row(
         children: [
-          // Checkbox
           InkWell(
             onTap: () => _toggleTaskCompletion(task),
             borderRadius: BorderRadius.circular(20),
@@ -281,10 +714,14 @@ class _TaskViewPageState extends State<TaskViewPage> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: task.isCompleted ? Colors.teal : Colors.white60,
+                  color: task.isCompleted
+                      ? colorScheme.primary
+                      : colorScheme.onSurfaceVariant,
                   width: 2,
                 ),
-                color: task.isCompleted ? Colors.teal : Colors.transparent,
+                color: task.isCompleted
+                    ? colorScheme.primary
+                    : Colors.transparent,
               ),
               child: task.isCompleted
                   ? Icon(Icons.check, size: 16, color: Colors.white)
@@ -292,8 +729,6 @@ class _TaskViewPageState extends State<TaskViewPage> {
             ),
           ),
           SizedBox(width: 16),
-
-          // Task info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -305,12 +740,12 @@ class _TaskViewPageState extends State<TaskViewPage> {
                     fontWeight: FontWeight.w600,
                     fontFamily: 'SF Pro Display',
                     color: task.isCompleted
-                        ? Colors.white
-                        : const Color.fromARGB(255, 227, 227, 227),
+                        ? colorScheme.onSurface
+                        : colorScheme.onSurface,
                     decoration: task.isCompleted
                         ? TextDecoration.lineThrough
                         : null,
-                    decorationColor: Colors.white38,
+                    decorationColor: colorScheme.onSurfaceVariant,
                     decorationThickness: 2,
                   ),
                   child: Text(task.title ?? 'Untitled'),
@@ -318,27 +753,33 @@ class _TaskViewPageState extends State<TaskViewPage> {
                 SizedBox(height: 8),
                 Row(
                   children: [
-                    // Category
-                    Icon(Icons.label_outline, size: 14, color: Colors.white60),
+                    Icon(
+                      Icons.label_outline,
+                      size: 14,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                     SizedBox(width: 4),
                     Text(
                       task.category ?? 'No Category',
                       style: TextStyle(
                         fontSize: 13,
                         fontFamily: 'SF Pro Text',
-                        color: Colors.white38,
+                        color: colorScheme.onSurfaceVariant,
                       ),
                     ),
                     SizedBox(width: 16),
-                    // Time
-                    Icon(Icons.access_time, size: 14, color: Colors.white38),
+                    Icon(
+                      Icons.access_time,
+                      size: 14,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                     SizedBox(width: 4),
                     Text(
                       DateFormat('hh:mm a').format(task.from),
                       style: TextStyle(
                         fontSize: 13,
                         fontFamily: 'SF Pro Text',
-                        color: Colors.white38,
+                        color: colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -346,10 +787,12 @@ class _TaskViewPageState extends State<TaskViewPage> {
               ],
             ),
           ),
-
-          // Delete button
           IconButton(
-            icon: Icon(Icons.delete_outline, color: Colors.red[300], size: 20),
+            icon: Icon(
+              Icons.delete_outline,
+              color: colorScheme.error,
+              size: 20,
+            ),
             onPressed: () => _deleteTask(task),
           ),
         ],
@@ -358,16 +801,16 @@ class _TaskViewPageState extends State<TaskViewPage> {
   }
 
   Widget _buildExpandedTaskCard(Meeting task) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return AnimatedOpacity(
       duration: Duration(milliseconds: 300),
       opacity: 1.0,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header row with checkbox and delete button
           Row(
             children: [
-              // Checkbox
               InkWell(
                 onTap: () => _toggleTaskCompletion(task),
                 borderRadius: BorderRadius.circular(20),
@@ -377,10 +820,14 @@ class _TaskViewPageState extends State<TaskViewPage> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: task.isCompleted ? Colors.teal : Colors.white60,
+                      color: task.isCompleted
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant,
                       width: 2,
                     ),
-                    color: task.isCompleted ? Colors.teal : Colors.transparent,
+                    color: task.isCompleted
+                        ? colorScheme.primary
+                        : Colors.transparent,
                   ),
                   child: task.isCompleted
                       ? Icon(Icons.check, size: 16, color: Colors.white)
@@ -388,8 +835,6 @@ class _TaskViewPageState extends State<TaskViewPage> {
                 ),
               ),
               SizedBox(width: 16),
-
-              // Task title
               Expanded(
                 child: AnimatedDefaultTextStyle(
                   duration: Duration(milliseconds: 300),
@@ -398,86 +843,88 @@ class _TaskViewPageState extends State<TaskViewPage> {
                     fontWeight: FontWeight.w600,
                     fontFamily: 'SF Pro Display',
                     color: task.isCompleted
-                        ? Colors.white
-                        : const Color.fromARGB(255, 227, 227, 227),
+                        ? colorScheme.onSurface
+                        : colorScheme.onSurface,
                     decoration: task.isCompleted
                         ? TextDecoration.lineThrough
                         : null,
-                    decorationColor: Colors.white38,
+                    decorationColor: colorScheme.onSurfaceVariant,
                     decorationThickness: 2,
                   ),
                   child: Text(task.title ?? 'Untitled'),
                 ),
               ),
-
-              // Delete button
               IconButton(
                 icon: Icon(
                   Icons.delete_outline,
-                  color: Colors.red[300],
+                  color: colorScheme.error,
                   size: 20,
                 ),
                 onPressed: () => _deleteTask(task),
               ),
             ],
           ),
-
           SizedBox(height: 16),
-
-          // Category and time row
           AnimatedOpacity(
             duration: Duration(milliseconds: 400),
             opacity: 1.0,
             child: Row(
               children: [
-                Icon(Icons.label_outline, size: 16, color: Colors.white60),
+                Icon(
+                  Icons.label_outline,
+                  size: 16,
+                  color: colorScheme.onSurfaceVariant,
+                ),
                 SizedBox(width: 8),
                 Text(
                   task.category ?? 'No Category',
                   style: TextStyle(
                     fontSize: 14,
                     fontFamily: 'SF Pro Text',
-                    color: Colors.white70,
+                    color: colorScheme.onSurface,
                   ),
                 ),
                 SizedBox(width: 24),
-                Icon(Icons.access_time, size: 16, color: Colors.white60),
+                Icon(
+                  Icons.access_time,
+                  size: 16,
+                  color: colorScheme.onSurfaceVariant,
+                ),
                 SizedBox(width: 8),
                 Text(
                   DateFormat('hh:mm a').format(task.from),
                   style: TextStyle(
                     fontSize: 14,
                     fontFamily: 'SF Pro Text',
-                    color: Colors.white70,
+                    color: colorScheme.onSurface,
                   ),
                 ),
               ],
             ),
           ),
-
           SizedBox(height: 12),
-
-          // Date row
           AnimatedOpacity(
             duration: Duration(milliseconds: 500),
             opacity: 1.0,
             child: Row(
               children: [
-                Icon(Icons.calendar_today, size: 16, color: Colors.white60),
+                Icon(
+                  Icons.calendar_today,
+                  size: 16,
+                  color: colorScheme.onSurfaceVariant,
+                ),
                 SizedBox(width: 8),
                 Text(
                   DateFormat('MMM dd, yyyy').format(task.from),
                   style: TextStyle(
                     fontSize: 14,
                     fontFamily: 'SF Pro Text',
-                    color: Colors.white70,
+                    color: colorScheme.onSurface,
                   ),
                 ),
               ],
             ),
           ),
-
-          // Description section
           if (task.description != null && task.description!.isNotEmpty) ...[
             SizedBox(height: 16),
             AnimatedOpacity(
@@ -486,7 +933,7 @@ class _TaskViewPageState extends State<TaskViewPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Divider(color: Colors.white30),
+                  Divider(color: colorScheme.outline),
                   SizedBox(height: 12),
                   Text(
                     'Description',
@@ -494,7 +941,7 @@ class _TaskViewPageState extends State<TaskViewPage> {
                       fontSize: 14,
                       fontFamily: 'SF Pro Text',
                       fontWeight: FontWeight.w600,
-                      color: Colors.white70,
+                      color: colorScheme.onSurface,
                     ),
                   ),
                   SizedBox(height: 8),
@@ -503,7 +950,7 @@ class _TaskViewPageState extends State<TaskViewPage> {
                     style: TextStyle(
                       fontSize: 14,
                       fontFamily: 'SF Pro Text',
-                      color: Colors.white60,
+                      color: colorScheme.onSurfaceVariant,
                       height: 1.4,
                     ),
                   ),
@@ -517,17 +964,25 @@ class _TaskViewPageState extends State<TaskViewPage> {
   }
 
   void _deleteTask(Meeting task) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[800],
+        backgroundColor: colorScheme.surface,
         title: Text(
           'Delete Task',
-          style: TextStyle(fontFamily: 'SF Pro Display', color: Colors.white70),
+          style: TextStyle(
+            fontFamily: 'SF Pro Display',
+            color: colorScheme.onSurface,
+          ),
         ),
         content: Text(
           'Are you sure you want to delete this task?',
-          style: TextStyle(fontFamily: 'SF Pro Text', color: Colors.white60),
+          style: TextStyle(
+            fontFamily: 'SF Pro Text',
+            color: colorScheme.onSurfaceVariant,
+          ),
         ),
         actions: [
           TextButton(
@@ -536,7 +991,7 @@ class _TaskViewPageState extends State<TaskViewPage> {
               'Cancel',
               style: TextStyle(
                 fontFamily: 'SF Pro Text',
-                color: Colors.white70,
+                color: colorScheme.onSurface,
               ),
             ),
           ),
@@ -550,7 +1005,7 @@ class _TaskViewPageState extends State<TaskViewPage> {
               'Delete',
               style: TextStyle(
                 fontFamily: 'SF Pro Text',
-                color: Colors.red[300],
+                color: colorScheme.error,
               ),
             ),
           ),

@@ -1,59 +1,55 @@
 import 'package:flutter/material.dart';
 
 class Meeting {
-  Meeting({
-    this.id,
-    this.title,
-    this.category,
-    this.description,
-    required this.from,
-    required this.to,
-    required this.background,
-    this.isAllDay = false,
-    this.isCompleted = false, // Add this
-  });
-
   String? id;
   String? title;
-  String? category;
   String? description;
+  String? category;
   DateTime from;
   DateTime to;
   Color background;
+  bool isCompleted;
+  bool isLocal;
   bool isAllDay;
-  bool isCompleted; // Add this
+
+  Meeting({
+    this.id,
+    this.title,
+    this.description,
+    this.category,
+    required this.from,
+    required this.to,
+    required this.background,
+    this.isCompleted = false,
+    this.isLocal = false,
+    this.isAllDay = false,
+  });
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id ?? '',
-      'title': title ?? '',
-      'category': category ?? '',
-      'description': description ?? '',
+      'id': id,
+      'title': title,
+      'description': description,
+      'category': category,
       'from': from.toIso8601String(),
       'to': to.toIso8601String(),
-      'color': background.value,
+      'color': background.value.toString(),
+      'isCompleted': isCompleted,
       'isAllDay': isAllDay,
-      'isCompleted': isCompleted, // Add this
     };
   }
 
   factory Meeting.fromJson(Map<String, dynamic> json) {
     return Meeting(
-      id: json['id']?.toString(),
-      title: json['title']?.toString(),
-      category: json['category']?.toString(),
-      description: json['description']?.toString(),
-      from: json['from'] != null
-          ? DateTime.parse(json['from'])
-          : DateTime.now(),
-      to: json['to'] != null
-          ? DateTime.parse(json['to'])
-          : DateTime.now().add(Duration(hours: 1)),
-      background: json['color'] != null
-          ? Color(json['color'] as int)
-          : Color(0xFF3F51B5),
-      isAllDay: json['isAllDay'] as bool? ?? false,
-      isCompleted: json['isCompleted'] as bool? ?? false, // Add this
+      id: json['id'],
+      title: json['title'],
+      description: json['description'],
+      category: json['category'],
+      from: DateTime.parse(json['from']),
+      to: DateTime.parse(json['to']),
+      background: Color(int.parse(json['color'])),
+      isCompleted: json['isCompleted'] ?? false,
+      isAllDay: json['isAllDay'] ?? false,
     );
   }
 }

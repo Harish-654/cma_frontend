@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
 import 'package:intl/intl.dart';
 import 'task_view_page.dart';
+import '../services/auth_service.dart';
 import '../models/meeting.dart';
 import '../services/task_service.dart';
 import '../main.dart'; // For supabase instance
@@ -20,6 +21,7 @@ class _PageOneState extends State<PageOne> {
   late CalendarController _calendarController;
   late MeetingDataSource _dataSource;
   final TaskService _taskService = TaskService();
+  final AuthService _authService = AuthService();
   bool _isLoading = true;
   bool _isDisposed = false;
   bool _hasLoadedData = false;
@@ -40,21 +42,21 @@ class _PageOneState extends State<PageOne> {
 
   // Load tasks from Supabase
   Future<void> _loadTasks() async {
-    if (_isDisposed || _hasLoadedData) return; // ← Check if already loaded
+    if (_isDisposed || !mounted) return;
 
     if (mounted) {
       setState(() => _isLoading = true);
     }
 
     try {
-      final tasks = await _taskService.getUserTasks();
+      // Load from BOTH Supabase and Local Storage
+      final tasks = await _taskService.getAllUserTasks();
 
       if (_isDisposed || !mounted) return;
 
       setState(() {
         _dataSource = MeetingDataSource(tasks);
         _isLoading = false;
-        _hasLoadedData = true; // ← Mark as loaded
       });
     } catch (e) {
       print('Error loading tasks: $e');
@@ -91,16 +93,6 @@ class _PageOneState extends State<PageOne> {
                       fontWeight: FontWeight.bold,
                       color: Theme.of(context).colorScheme.onSurface,
                     ),
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.add_circle,
-                      size: 32,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    onPressed: () {
-                      _showAddTaskDialog();
-                    },
                   ),
                 ],
               ),
@@ -200,6 +192,8 @@ class _PageOneState extends State<PageOne> {
                             ),
                           );
                         },
+
+                    // In page_one.dart, find where you navigate to TaskViewPage:
                     onTap: (CalendarTapDetails details) async {
                       if (details.date != null) {
                         final tasksList = <Meeting>[];
@@ -210,16 +204,20 @@ class _PageOneState extends State<PageOne> {
                           }
                         }
 
+                        // Get current user role
+                        final userProfile = await _authService
+                            .getCurrentUserProfile();
+                        final isRep = userProfile?.role == 'representative';
+
                         await Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => TaskViewPage(
                               selectedDate: details.date!,
                               allTasks: tasksList,
                               onDeleteTask: (task) async {
-                                // Delete from Supabase
                                 try {
-                                  await _taskService.deleteTask(task.id!);
-                                  await _loadTasks(); // Reload tasks
+                                  await _taskService.deleteTaskAny(task);
+                                  await _loadTasks(); // Reload after delete
 
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(content: Text('Task deleted')),
@@ -233,91 +231,18 @@ class _PageOneState extends State<PageOne> {
                                 }
                               },
                               onNavigateToPage: widget.onNavigateToPage,
+                              isRepresentative: isRep,
                             ),
                           ),
                         );
+
+                        // Reload tasks after returning from TaskView
+                        await _loadTasks();
                       }
                     },
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showAddTaskDialog() {
-    final TextEditingController titleController = TextEditingController();
-    final TextEditingController categoryController = TextEditingController();
-    final TextEditingController descriptionController = TextEditingController();
-    DateTime selectedDate = DateTime.now();
-    TimeOfDay selectedTime = TimeOfDay.now();
-    Color selectedColor = Color(0xFF6750A4);
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('Add Task'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // ... your existing form fields ...
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (titleController.text.isNotEmpty &&
-                    categoryController.text.isNotEmpty) {
-                  final newMeeting = Meeting(
-                    id: DateTime.now().millisecondsSinceEpoch.toString(),
-                    title: titleController.text,
-                    category: categoryController.text,
-                    description: descriptionController.text,
-                    from: DateTime(
-                      selectedDate.year,
-                      selectedDate.month,
-                      selectedDate.day,
-                      selectedTime.hour,
-                      selectedTime.minute,
-                    ),
-                    to: DateTime(
-                      selectedDate.year,
-                      selectedDate.month,
-                      selectedDate.day,
-                      selectedTime.hour + 1,
-                      selectedTime.minute,
-                    ),
-                    background: selectedColor,
-                  );
-
-                  Navigator.pop(context);
-
-                  // Save to Supabase
-                  try {
-                    await _taskService.createPersonalTask(newMeeting);
-                    await _loadTasks(); // Reload tasks
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Task created successfully!')),
-                    );
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: ${e.toString()}')),
-                    );
-                  }
-                }
-              },
-              child: Text('Add'),
             ),
           ],
         ),
