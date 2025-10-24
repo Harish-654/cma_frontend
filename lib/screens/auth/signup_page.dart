@@ -3,6 +3,8 @@ import '../../services/auth_service.dart';
 import '../main_screen.dart';
 
 class SignupPage extends StatefulWidget {
+  const SignupPage({super.key});
+
   @override
   State<SignupPage> createState() => _SignupPageState();
 }

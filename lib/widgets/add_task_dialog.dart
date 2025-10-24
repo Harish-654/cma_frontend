@@ -6,7 +6,7 @@ class AddTaskDialog extends StatefulWidget {
   final DateTime selectedDate;
   final Function(Meeting) onTaskCreated;
 
-  AddTaskDialog({required this.selectedDate, required this.onTaskCreated});
+  const AddTaskDialog({super.key, required this.selectedDate, required this.onTaskCreated});
 
   @override
   State<AddTaskDialog> createState() => _AddTaskDialogState();
@@ -168,7 +168,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                   hintText: 'Enter task title',
                   hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
                   filled: true,
-                  fillColor: colorScheme.surfaceVariant.withOpacity(0.5),
+                  fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.5),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
@@ -200,7 +200,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                   hintText: 'Enter description',
                   hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
                   filled: true,
-                  fillColor: colorScheme.surfaceVariant.withOpacity(0.5),
+                  fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.5),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
@@ -230,7 +230,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                 child: Container(
                   padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: colorScheme.surfaceVariant.withOpacity(0.5),
+                    color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(

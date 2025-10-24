@@ -15,7 +15,7 @@ class TaskViewPage extends StatefulWidget {
   final Function(int)? onNavigateToPage;
   final bool isRepresentative;
 
-  TaskViewPage({
+  const TaskViewPage({super.key, 
     required this.selectedDate,
     required this.allTasks,
     required this.onDeleteTask,
@@ -322,12 +322,12 @@ class _TaskViewPageState extends State<TaskViewPage>
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.background,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        backgroundColor: colorScheme.background,
+        backgroundColor: colorScheme.surface,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: colorScheme.onBackground),
+          icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(
@@ -348,7 +348,7 @@ class _TaskViewPageState extends State<TaskViewPage>
                 fontSize: 20,
                 fontFamily: 'SF Pro Display',
                 fontWeight: FontWeight.bold,
-                color: colorScheme.onBackground,
+                color: colorScheme.onSurface,
               ),
             ),
           ],
@@ -383,7 +383,7 @@ class _TaskViewPageState extends State<TaskViewPage>
                       Icon(
                         Icons.event_available,
                         size: 80,
-                        color: colorScheme.surfaceVariant,
+                        color: colorScheme.surfaceContainerHighest,
                       ),
                       SizedBox(height: 16),
                       Text(
@@ -498,7 +498,7 @@ class _TaskViewPageState extends State<TaskViewPage>
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: colorScheme.surfaceVariant,
+                            color: colorScheme.surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -556,7 +556,7 @@ class _TaskViewPageState extends State<TaskViewPage>
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: colorScheme.surfaceVariant,
+                          color: colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -666,7 +666,7 @@ class _TaskViewPageState extends State<TaskViewPage>
         margin: EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: task.isCompleted
-              ? colorScheme.surfaceVariant.withOpacity(0.5)
+              ? colorScheme.surfaceContainerHighest.withOpacity(0.5)
               : colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(

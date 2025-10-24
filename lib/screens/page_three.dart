@@ -8,6 +8,8 @@ import 'main_screen.dart';
 import 'auth/login_page.dart';
 
 class PageThree extends StatefulWidget {
+  const PageThree({super.key});
+
   @override
   State<PageThree> createState() => _PageThreeState();
 }
@@ -205,7 +207,7 @@ class _PageThreeState extends State<PageThree> {
 
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: colorScheme.background,
+        backgroundColor: colorScheme.surface,
         body: Center(
           child: CircularProgressIndicator(color: colorScheme.primary),
         ),
@@ -213,7 +215,7 @@ class _PageThreeState extends State<PageThree> {
     }
 
     return Scaffold(
-      backgroundColor: colorScheme.background,
+      backgroundColor: colorScheme.surface,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(16, 16, 16, 100),

@@ -8,7 +8,7 @@ class AddClassTaskDialog extends StatefulWidget {
   final List<UserModel> classStudents; // Students in the class
   final Function(Meeting, List<String>) onTaskCreated; // task, studentIds
 
-  AddClassTaskDialog({
+  const AddClassTaskDialog({super.key, 
     required this.selectedDate,
     required this.classStudents,
     required this.onTaskCreated,
@@ -222,7 +222,7 @@ class _AddClassTaskDialogState extends State<AddClassTaskDialog> {
                           color: colorScheme.onSurfaceVariant,
                         ),
                         filled: true,
-                        fillColor: colorScheme.surfaceVariant.withOpacity(0.5),
+                        fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.5),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -255,7 +255,7 @@ class _AddClassTaskDialogState extends State<AddClassTaskDialog> {
                           color: colorScheme.onSurfaceVariant,
                         ),
                         filled: true,
-                        fillColor: colorScheme.surfaceVariant.withOpacity(0.5),
+                        fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.5),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -289,7 +289,7 @@ class _AddClassTaskDialogState extends State<AddClassTaskDialog> {
                           color: colorScheme.onSurfaceVariant,
                         ),
                         filled: true,
-                        fillColor: colorScheme.surfaceVariant.withOpacity(0.5),
+                        fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.5),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -322,7 +322,7 @@ class _AddClassTaskDialogState extends State<AddClassTaskDialog> {
                           vertical: 12,
                         ),
                         decoration: BoxDecoration(
-                          color: colorScheme.surfaceVariant.withOpacity(0.5),
+                          color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(

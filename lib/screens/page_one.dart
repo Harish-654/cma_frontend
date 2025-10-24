@@ -11,7 +11,7 @@ import '../main.dart'; // For supabase instance
 class PageOne extends StatefulWidget {
   final Function(int)? onNavigateToPage; // ← Add this
 
-  PageOne({this.onNavigateToPage}); // ← Add this
+  const PageOne({super.key, this.onNavigateToPage}); // ← Add this
 
   @override
   State<PageOne> createState() => _PageOneState();
@@ -23,7 +23,7 @@ class _PageOneState extends State<PageOne> {
   final TaskService _taskService = TaskService();
   final AuthService _authService = AuthService();
   bool _isLoading = true;
-  bool _isDisposed = false;
+  final bool _isDisposed = false;
   bool _hasLoadedData = false;
 
   @override

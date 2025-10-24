@@ -1,5 +1,4 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/task_model.dart';
 import '../models/meeting.dart';
 import 'package:flutter/material.dart';
 import 'local_storage_service.dart';
