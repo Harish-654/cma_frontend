@@ -21,6 +21,7 @@ class TaskViewPage extends StatefulWidget {
 
 class _TaskViewPageState extends State<TaskViewPage> {
   late List<Meeting> todayTasks;
+  String? expandedTaskId;
 
   @override
   void initState() {
@@ -49,17 +50,25 @@ class _TaskViewPageState extends State<TaskViewPage> {
     });
   }
 
+  void _toggleTaskExpansion(Meeting task) {
+    setState(() {
+      if (expandedTaskId == task.id) {
+        expandedTaskId = null;
+      } else {
+        expandedTaskId = task.id;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Scaffold(
-      backgroundColor: colorScheme.surfaceContainerLow,
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: colorScheme.surfaceContainerLow,
+        backgroundColor: Colors.black,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
+          icon: Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(
@@ -69,7 +78,8 @@ class _TaskViewPageState extends State<TaskViewPage> {
               DateFormat('EEEE').format(widget.selectedDate),
               style: TextStyle(
                 fontSize: 14,
-                color: colorScheme.onSurfaceVariant,
+                fontFamily: 'SF Pro Text',
+                color: const Color.fromARGB(255, 121, 121, 121),
                 fontWeight: FontWeight.normal,
               ),
             ),
@@ -77,8 +87,9 @@ class _TaskViewPageState extends State<TaskViewPage> {
               DateFormat('MMMM dd, yyyy').format(widget.selectedDate),
               style: TextStyle(
                 fontSize: 20,
+                fontFamily: 'SF Pro Display',
                 fontWeight: FontWeight.bold,
-                color: colorScheme.onSurface,
+                color: const Color.fromARGB(255, 185, 185, 185),
               ),
             ),
           ],
@@ -88,15 +99,16 @@ class _TaskViewPageState extends State<TaskViewPage> {
             margin: EdgeInsets.only(right: 16),
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: colorScheme.primaryContainer,
+              color: Colors.teal,
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
               '${todayTasks.where((t) => t.isCompleted).length}/${todayTasks.length}',
               style: TextStyle(
                 fontSize: 14,
+                fontFamily: 'SF Pro Text',
                 fontWeight: FontWeight.bold,
-                color: colorScheme.onPrimaryContainer,
+                color: Colors.white,
               ),
             ),
           ),
@@ -112,14 +124,15 @@ class _TaskViewPageState extends State<TaskViewPage> {
                       Icon(
                         Icons.event_available,
                         size: 80,
-                        color: colorScheme.outlineVariant,
+                        color: Colors.white38,
                       ),
                       SizedBox(height: 16),
                       Text(
                         'No tasks for this day',
                         style: TextStyle(
                           fontSize: 18,
-                          color: colorScheme.onSurfaceVariant,
+                          fontFamily: 'SF Pro Text',
+                          color: Colors.white60,
                         ),
                       ),
                     ],
@@ -129,55 +142,60 @@ class _TaskViewPageState extends State<TaskViewPage> {
                   padding: EdgeInsets.fromLTRB(16, 16, 16, 120),
                   itemCount: todayTasks.length,
                   itemBuilder: (context, index) {
-                    return _buildTaskItem(todayTasks[index], colorScheme);
+                    return _buildTaskItem(todayTasks[index]);
                   },
                 ),
 
           // Floating Navigation Bar
-          Positioned(
-            bottom: 20,
-            left: 20,
-            right: 20,
-            child: Container(
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  BoxShadow(
-                    color: colorScheme.shadow.withOpacity(0.2),
-                    blurRadius: 15,
-                    offset: Offset(0, 5),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Container(
+                margin: EdgeInsets.only(bottom: 20),
+                child: Container(
+                  width: MediaQuery.of(context).size.width - 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[900],
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 15,
+                        offset: Offset(0, 5),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(30),
-                child: BottomNavigationBar(
-                  backgroundColor: colorScheme.surface,
-                  currentIndex: 0,
-                  elevation: 0,
-                  selectedItemColor: colorScheme.primary,
-                  unselectedItemColor: colorScheme.onSurfaceVariant,
-                  onTap: (index) {
-                    if (widget.onNavigateToPage != null) {
-                      widget.onNavigateToPage!(index);
-                    }
-                    Navigator.pop(context);
-                  },
-                  items: [
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.home),
-                      label: 'Calendar',
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(30),
+                    child: BottomNavigationBar(
+                      backgroundColor: Colors.grey[900],
+                      currentIndex: 0,
+                      elevation: 0,
+                      selectedItemColor: Colors.teal,
+                      unselectedItemColor: Colors.white60,
+                      type: BottomNavigationBarType.fixed,
+                      onTap: (index) {
+                        if (widget.onNavigateToPage != null) {
+                          widget.onNavigateToPage!(index);
+                        }
+                        Navigator.pop(context);
+                      },
+                      items: [
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.home),
+                          label: 'Calendar',
+                        ),
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.explore),
+                          label: 'Explore',
+                        ),
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.person),
+                          label: 'Profile',
+                        ),
+                      ],
                     ),
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.explore),
-                      label: 'Explore',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.person),
-                      label: 'Profile',
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -187,14 +205,14 @@ class _TaskViewPageState extends State<TaskViewPage> {
     );
   }
 
-  Widget _buildTaskItem(Meeting task, ColorScheme colorScheme) {
+  Widget _buildTaskItem(Meeting task) {
     return Dismissible(
       key: Key(task.id ?? DateTime.now().millisecondsSinceEpoch.toString()),
       background: Container(
         margin: EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: colorScheme.primary,
-          borderRadius: BorderRadius.circular(12),
+          color: Colors.teal,
+          borderRadius: BorderRadius.circular(16),
         ),
         alignment: Alignment.centerLeft,
         padding: EdgeInsets.only(left: 20),
@@ -203,8 +221,8 @@ class _TaskViewPageState extends State<TaskViewPage> {
       secondaryBackground: Container(
         margin: EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: colorScheme.primary,
-          borderRadius: BorderRadius.circular(12),
+          color: Colors.teal,
+          borderRadius: BorderRadius.circular(16),
         ),
         alignment: Alignment.centerRight,
         padding: EdgeInsets.only(right: 20),
@@ -218,123 +236,27 @@ class _TaskViewPageState extends State<TaskViewPage> {
         margin: EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: task.isCompleted
-              ? colorScheme.surfaceContainerHighest.withOpacity(0.5)
-              : colorScheme.surface,
-          borderRadius: BorderRadius.circular(12),
+              ? Colors.grey[900]!.withOpacity(0.5)
+              : Colors.grey[900],
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: task.isCompleted
-                ? colorScheme.outlineVariant
-                : colorScheme.outline.withOpacity(0.3),
+            color: task.isCompleted ? Colors.grey[700]! : Colors.grey[800]!,
             width: 1,
           ),
         ),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () => _showDetails(task, colorScheme),
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  // Checkbox
-                  InkWell(
-                    onTap: () => _toggleTaskCompletion(task),
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: task.isCompleted
-                              ? colorScheme.primary
-                              : colorScheme.outline,
-                          width: 2,
-                        ),
-                        color: task.isCompleted
-                            ? colorScheme.primary
-                            : Colors.transparent,
-                      ),
-                      child: task.isCompleted
-                          ? Icon(
-                              Icons.check,
-                              size: 16,
-                              color: colorScheme.onPrimary,
-                            )
-                          : null,
-                    ),
-                  ),
-                  SizedBox(width: 16),
-
-                  // Task info
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          task.title ?? 'Untitled',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: task.isCompleted
-                                ? colorScheme.onSurfaceVariant
-                                : colorScheme.onSurface,
-                            decoration: task.isCompleted
-                                ? TextDecoration.lineThrough
-                                : null,
-                            decorationColor: colorScheme.onSurfaceVariant,
-                            decorationThickness: 2,
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Row(
-                          children: [
-                            // Category
-                            Icon(
-                              Icons.label_outline,
-                              size: 14,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              task.category ?? 'No Category',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            SizedBox(width: 16),
-                            // Time
-                            Icon(
-                              Icons.access_time,
-                              size: 14,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              DateFormat('hh:mm a').format(task.from),
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Delete button
-                  IconButton(
-                    icon: Icon(
-                      Icons.delete_outline,
-                      color: colorScheme.error,
-                      size: 20,
-                    ),
-                    onPressed: () => _deleteTask(task),
-                  ),
-                ],
+            onTap: () => _toggleTaskExpansion(task),
+            borderRadius: BorderRadius.circular(16),
+            child: AnimatedSize(
+              duration: Duration(milliseconds: 400),
+              curve: Curves.easeInOut,
+              child: Container(
+                padding: EdgeInsets.all(16),
+                child: expandedTaskId == task.id
+                    ? _buildExpandedTaskCard(task)
+                    : _buildCollapsedTaskCard(task),
               ),
             ),
           ),
@@ -343,81 +265,252 @@ class _TaskViewPageState extends State<TaskViewPage> {
     );
   }
 
-  void _showDetails(Meeting task, ColorScheme colorScheme) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          task.title ?? 'Untitled',
-          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.label_outline,
-                  size: 18,
-                  color: colorScheme.onSurfaceVariant,
+  Widget _buildCollapsedTaskCard(Meeting task) {
+    return AnimatedOpacity(
+      duration: Duration(milliseconds: 300),
+      opacity: 1.0,
+      child: Row(
+        children: [
+          // Checkbox
+          InkWell(
+            onTap: () => _toggleTaskCompletion(task),
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: task.isCompleted ? Colors.teal : Colors.white60,
+                  width: 2,
                 ),
+                color: task.isCompleted ? Colors.teal : Colors.transparent,
+              ),
+              child: task.isCompleted
+                  ? Icon(Icons.check, size: 16, color: Colors.white)
+                  : null,
+            ),
+          ),
+          SizedBox(width: 16),
+
+          // Task info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AnimatedDefaultTextStyle(
+                  duration: Duration(milliseconds: 300),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'SF Pro Display',
+                    color: task.isCompleted
+                        ? Colors.white
+                        : const Color.fromARGB(255, 227, 227, 227),
+                    decoration: task.isCompleted
+                        ? TextDecoration.lineThrough
+                        : null,
+                    decorationColor: Colors.white38,
+                    decorationThickness: 2,
+                  ),
+                  child: Text(task.title ?? 'Untitled'),
+                ),
+                SizedBox(height: 8),
+                Row(
+                  children: [
+                    // Category
+                    Icon(Icons.label_outline, size: 14, color: Colors.white60),
+                    SizedBox(width: 4),
+                    Text(
+                      task.category ?? 'No Category',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontFamily: 'SF Pro Text',
+                        color: Colors.white38,
+                      ),
+                    ),
+                    SizedBox(width: 16),
+                    // Time
+                    Icon(Icons.access_time, size: 14, color: Colors.white38),
+                    SizedBox(width: 4),
+                    Text(
+                      DateFormat('hh:mm a').format(task.from),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontFamily: 'SF Pro Text',
+                        color: Colors.white38,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Delete button
+          IconButton(
+            icon: Icon(Icons.delete_outline, color: Colors.red[300], size: 20),
+            onPressed: () => _deleteTask(task),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExpandedTaskCard(Meeting task) {
+    return AnimatedOpacity(
+      duration: Duration(milliseconds: 300),
+      opacity: 1.0,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row with checkbox and delete button
+          Row(
+            children: [
+              // Checkbox
+              InkWell(
+                onTap: () => _toggleTaskCompletion(task),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: task.isCompleted ? Colors.teal : Colors.white60,
+                      width: 2,
+                    ),
+                    color: task.isCompleted ? Colors.teal : Colors.transparent,
+                  ),
+                  child: task.isCompleted
+                      ? Icon(Icons.check, size: 16, color: Colors.white)
+                      : null,
+                ),
+              ),
+              SizedBox(width: 16),
+
+              // Task title
+              Expanded(
+                child: AnimatedDefaultTextStyle(
+                  duration: Duration(milliseconds: 300),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'SF Pro Display',
+                    color: task.isCompleted
+                        ? Colors.white
+                        : const Color.fromARGB(255, 227, 227, 227),
+                    decoration: task.isCompleted
+                        ? TextDecoration.lineThrough
+                        : null,
+                    decorationColor: Colors.white38,
+                    decorationThickness: 2,
+                  ),
+                  child: Text(task.title ?? 'Untitled'),
+                ),
+              ),
+
+              // Delete button
+              IconButton(
+                icon: Icon(
+                  Icons.delete_outline,
+                  color: Colors.red[300],
+                  size: 20,
+                ),
+                onPressed: () => _deleteTask(task),
+              ),
+            ],
+          ),
+
+          SizedBox(height: 16),
+
+          // Category and time row
+          AnimatedOpacity(
+            duration: Duration(milliseconds: 400),
+            opacity: 1.0,
+            child: Row(
+              children: [
+                Icon(Icons.label_outline, size: 16, color: Colors.white60),
                 SizedBox(width: 8),
                 Text(
                   task.category ?? 'No Category',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontFamily: 'SF Pro Text',
+                    color: Colors.white70,
+                  ),
                 ),
-              ],
-            ),
-            SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(
-                  Icons.access_time,
-                  size: 18,
-                  color: colorScheme.onSurfaceVariant,
-                ),
+                SizedBox(width: 24),
+                Icon(Icons.access_time, size: 16, color: Colors.white60),
                 SizedBox(width: 8),
-                Expanded(
-                  child: Text(DateFormat('MMM dd, yyyy').format(task.from)),
-                ),
-              ],
-            ),
-            Row(
-              children: [
-                SizedBox(width: 8),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 18),
-                    child: Text(DateFormat('hh:mm a').format(task.from)),
+                Text(
+                  DateFormat('hh:mm a').format(task.from),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontFamily: 'SF Pro Text',
+                    color: Colors.white70,
                   ),
                 ),
               ],
             ),
-            if (task.description != null && task.description!.isNotEmpty) ...[
-              SizedBox(height: 12),
-              Divider(),
-              SizedBox(height: 8),
-              Text(
-                'Description',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              SizedBox(height: 8),
-              Text(
-                task.description!,
-                style: TextStyle(color: colorScheme.onSurfaceVariant),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Close'),
           ),
+
+          SizedBox(height: 12),
+
+          // Date row
+          AnimatedOpacity(
+            duration: Duration(milliseconds: 500),
+            opacity: 1.0,
+            child: Row(
+              children: [
+                Icon(Icons.calendar_today, size: 16, color: Colors.white60),
+                SizedBox(width: 8),
+                Text(
+                  DateFormat('MMM dd, yyyy').format(task.from),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontFamily: 'SF Pro Text',
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Description section
+          if (task.description != null && task.description!.isNotEmpty) ...[
+            SizedBox(height: 16),
+            AnimatedOpacity(
+              duration: Duration(milliseconds: 600),
+              opacity: 1.0,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Divider(color: Colors.white30),
+                  SizedBox(height: 12),
+                  Text(
+                    'Description',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontFamily: 'SF Pro Text',
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white70,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    task.description!,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontFamily: 'SF Pro Text',
+                      color: Colors.white60,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -427,12 +520,25 @@ class _TaskViewPageState extends State<TaskViewPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Delete Task'),
-        content: Text('Are you sure you want to delete this task?'),
+        backgroundColor: Colors.grey[800],
+        title: Text(
+          'Delete Task',
+          style: TextStyle(fontFamily: 'SF Pro Display', color: Colors.white70),
+        ),
+        content: Text(
+          'Are you sure you want to delete this task?',
+          style: TextStyle(fontFamily: 'SF Pro Text', color: Colors.white60),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                fontFamily: 'SF Pro Text',
+                color: Colors.white70,
+              ),
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -440,7 +546,13 @@ class _TaskViewPageState extends State<TaskViewPage> {
               Navigator.pop(context);
               Navigator.pop(context);
             },
-            child: Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text(
+              'Delete',
+              style: TextStyle(
+                fontFamily: 'SF Pro Text',
+                color: Colors.red[300],
+              ),
+            ),
           ),
         ],
       ),

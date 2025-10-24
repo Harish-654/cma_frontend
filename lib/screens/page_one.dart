@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
 import 'package:intl/intl.dart';
 import 'task_view_page.dart';
-import '../models/meeting.dart'; // Add this line
+import '../models/meeting.dart';
+import '../services/task_service.dart';
+import '../main.dart'; // For supabase instance
+// Add this line
 
 class PageOne extends StatefulWidget {
   final Function(int)? onNavigateToPage; // ← Add this
@@ -16,92 +19,56 @@ class PageOne extends StatefulWidget {
 class _PageOneState extends State<PageOne> {
   late CalendarController _calendarController;
   late MeetingDataSource _dataSource;
+  final TaskService _taskService = TaskService();
+  bool _isLoading = true;
+  bool _isDisposed = false;
+  bool _hasLoadedData = false;
+
+  @override
+  bool get wantKeepAlive => true; // ← Add this flag
 
   @override
   void initState() {
     super.initState();
     _calendarController = CalendarController();
-    _dataSource = MeetingDataSource(_getDataSource());
+    _dataSource = MeetingDataSource([]);
+    if (!_hasLoadedData) {
+      // ← Only load once
+      _loadTasks();
+    }
   }
 
-  List<Meeting> _getDataSource() {
-    final List<Meeting> meetings = <Meeting>[];
-    final DateTime today = DateTime.now();
+  // Load tasks from Supabase
+  Future<void> _loadTasks() async {
+    if (_isDisposed || _hasLoadedData) return; // ← Check if already loaded
 
-    // Use simple colors that work in both light and dark mode
-    meetings.add(
-      Meeting(
-        id: '1',
-        title: 'Discuss Q4 Goals',
-        category: 'Meeting',
-        description: 'Review team objectives and KPIs for Q4',
-        from: DateTime(today.year, today.month, today.day, 10, 0),
-        to: DateTime(today.year, today.month, today.day, 11, 0),
-        background: Color(0xFF6750A4), // Purple - primary-like
-      ),
-    );
+    if (mounted) {
+      setState(() => _isLoading = true);
+    }
 
-    meetings.add(
-      Meeting(
-        id: '2',
-        title: 'Sprint Planning',
-        category: 'Work',
-        description: 'Plan next sprint tasks and assignments',
-        from: DateTime(today.year, today.month, today.day, 14, 0),
-        to: DateTime(today.year, today.month, today.day, 15, 0),
-        background: Color(0xFF625B71), // Gray-purple - secondary-like
-      ),
-    );
+    try {
+      final tasks = await _taskService.getUserTasks();
 
-    meetings.add(
-      Meeting(
-        id: '3',
-        title: 'Pull Request Review',
-        category: 'Development',
-        description: 'Review team members code contributions',
-        from: DateTime(today.year, today.month, today.day + 1, 11, 0),
-        to: DateTime(today.year, today.month, today.day + 1, 12, 0),
-        background: Color(0xFF7D5260), // Mauve - tertiary-like
-      ),
-    );
+      if (_isDisposed || !mounted) return;
 
-    meetings.add(
-      Meeting(
-        id: '4',
-        title: 'Data Structures Study',
-        category: 'Study',
-        description: 'Review binary trees and graph algorithms',
-        from: DateTime(today.year, today.month, today.day + 2, 16, 0),
-        to: DateTime(today.year, today.month, today.day + 2, 18, 0),
-        background: Color(0xFF6750A4), // Purple
-      ),
-    );
+      setState(() {
+        _dataSource = MeetingDataSource(tasks);
+        _isLoading = false;
+        _hasLoadedData = true; // ← Mark as loaded
+      });
+    } catch (e) {
+      print('Error loading tasks: $e');
 
-    meetings.add(
-      Meeting(
-        id: '5',
-        title: 'AI Workshop',
-        category: 'Workshop',
-        description: 'Machine learning fundamentals workshop',
-        from: DateTime(today.year, today.month, today.day - 2, 9, 0),
-        to: DateTime(today.year, today.month, today.day - 2, 12, 0),
-        background: Color(0xFF625B71), // Gray-purple
-      ),
-    );
+      if (_isDisposed || !mounted) return;
 
-    meetings.add(
-      Meeting(
-        id: '6',
-        title: 'Database Assignment Deadline',
-        category: 'Assignment',
-        description: 'Submit ER diagram and normalization project',
-        from: DateTime(today.year, today.month, today.day + 5, 23, 59),
-        to: DateTime(today.year, today.month, today.day + 5, 23, 59),
-        background: Color(0xFFB3261E), // Red - error-like
-      ),
-    );
+      setState(() => _isLoading = false);
+    }
+  }
 
-    return meetings;
+  // Add a method to refresh data manually
+  Future<void> refreshTasks() async {
+    _hasLoadedData = false;
+    await _loadTasks();
   }
 
   @override
@@ -243,32 +210,32 @@ class _PageOneState extends State<PageOne> {
                           }
                         }
 
-                        // Wait for the result from TaskViewPage
-                        final selectedPageIndex = await Navigator.of(context)
-                            .push(
-                              MaterialPageRoute(
-                                builder: (_) => TaskViewPage(
-                                  selectedDate: details.date!,
-                                  allTasks: tasksList,
-                                  onDeleteTask: (task) {
-                                    setState(() {
-                                      _dataSource.appointments?.remove(task);
-                                      _dataSource.notifyListeners(
-                                        CalendarDataSourceAction.remove,
-                                        [task],
-                                      );
-                                    });
-                                  },
-                                ),
-                              ),
-                            );
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => TaskViewPage(
+                              selectedDate: details.date!,
+                              allTasks: tasksList,
+                              onDeleteTask: (task) async {
+                                // Delete from Supabase
+                                try {
+                                  await _taskService.deleteTask(task.id!);
+                                  await _loadTasks(); // Reload tasks
 
-                        // If a page was selected from task view, notify main screen
-                        if (selectedPageIndex != null &&
-                            selectedPageIndex != 0) {
-                          // Pop this route and pass the index to main_screen
-                          Navigator.pop(context, selectedPageIndex);
-                        }
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Task deleted')),
+                                  );
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Error deleting task'),
+                                    ),
+                                  );
+                                }
+                              },
+                              onNavigateToPage: widget.onNavigateToPage,
+                            ),
+                          ),
+                        );
                       }
                     },
                   ),
@@ -287,7 +254,7 @@ class _PageOneState extends State<PageOne> {
     final TextEditingController descriptionController = TextEditingController();
     DateTime selectedDate = DateTime.now();
     TimeOfDay selectedTime = TimeOfDay.now();
-    Color selectedColor = Color(0xFF6750A4); // Default purple
+    Color selectedColor = Color(0xFF6750A4);
 
     showDialog(
       context: context,
@@ -298,99 +265,7 @@ class _PageOneState extends State<PageOne> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                  controller: titleController,
-                  decoration: InputDecoration(
-                    labelText: 'Title',
-                    hintText: 'Enter task title',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.title),
-                  ),
-                ),
-                SizedBox(height: 12),
-                TextField(
-                  controller: categoryController,
-                  decoration: InputDecoration(
-                    labelText: 'Category',
-                    hintText: 'e.g., Work, Personal, Study',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.category),
-                  ),
-                ),
-                SizedBox(height: 12),
-                TextField(
-                  controller: descriptionController,
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    labelText: 'Description',
-                    hintText: 'Enter task details',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.description),
-                  ),
-                ),
-                SizedBox(height: 16),
-                ListTile(
-                  leading: Icon(Icons.calendar_today),
-                  title: Text(DateFormat('MMM dd, yyyy').format(selectedDate)),
-                  onTap: () async {
-                    final date = await showDatePicker(
-                      context: context,
-                      initialDate: selectedDate,
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime(2030),
-                    );
-                    if (date != null) {
-                      setDialogState(() => selectedDate = date);
-                    }
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.access_time),
-                  title: Text(selectedTime.format(context)),
-                  onTap: () async {
-                    final time = await showTimePicker(
-                      context: context,
-                      initialTime: selectedTime,
-                    );
-                    if (time != null) {
-                      setDialogState(() => selectedTime = time);
-                    }
-                  },
-                ),
-                SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  children:
-                      [
-                        Color(0xFF6750A4), // Primary purple
-                        Color(0xFF625B71), // Secondary gray-purple
-                        Color(0xFF7D5260), // Tertiary mauve
-                        Color(0xFFB3261E), // Error red
-                      ].map((color) {
-                        return GestureDetector(
-                          onTap: () =>
-                              setDialogState(() => selectedColor = color),
-                          child: Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: color,
-                              shape: BoxShape.circle,
-                              border: selectedColor == color
-                                  ? Border.all(color: Colors.white, width: 3)
-                                  : null,
-                            ),
-                            child: selectedColor == color
-                                ? Icon(
-                                    Icons.check,
-                                    color: Colors.white,
-                                    size: 18,
-                                  )
-                                : null,
-                          ),
-                        );
-                      }).toList(),
-                ),
+                // ... your existing form fields ...
               ],
             ),
           ),
@@ -400,7 +275,7 @@ class _PageOneState extends State<PageOne> {
               child: Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (titleController.text.isNotEmpty &&
                     categoryController.text.isNotEmpty) {
                   final newMeeting = Meeting(
@@ -424,13 +299,22 @@ class _PageOneState extends State<PageOne> {
                     ),
                     background: selectedColor,
                   );
-                  setState(() {
-                    _dataSource.appointments!.add(newMeeting);
-                    _dataSource.notifyListeners(CalendarDataSourceAction.add, [
-                      newMeeting,
-                    ]);
-                  });
+
                   Navigator.pop(context);
+
+                  // Save to Supabase
+                  try {
+                    await _taskService.createPersonalTask(newMeeting);
+                    await _loadTasks(); // Reload tasks
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Task created successfully!')),
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: ${e.toString()}')),
+                    );
+                  }
                 }
               },
               child: Text('Add'),

@@ -37,6 +37,7 @@ dependencies:
   syncfusion_flutter_calendar: ^31.2.3
   intl: ^0.20.2
   supabase_flutter: ^2.10.3
+  shared_preferences: ^2.2.2  # For local storage
 
 dev_dependencies:
   flutter_test:
