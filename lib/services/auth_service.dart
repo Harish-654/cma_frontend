@@ -4,18 +4,7 @@ import '../models/user_model.dart';
 class AuthService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  // Sign out
-  Future<void> signOut() async {
-    await _supabase.auth.signOut();
-  }
-
-  // Sign in
-  Future<void> signIn({required String email, required String password}) async {
-    await _supabase.auth.signInWithPassword(email: email, password: password);
-  }
-
-  // Sign up
-  Future<void> signUp({
+  Future<UserModel?> signUp({
     required String email,
     required String password,
     required String fullName,
@@ -24,10 +13,8 @@ class AuthService {
     final response = await _supabase.auth.signUp(
       email: email,
       password: password,
-      data: {'full_name': fullName, 'role': role},
     );
 
-    // Insert into users table
     if (response.user != null) {
       await _supabase.from('users').insert({
         'id': response.user!.id,
@@ -35,31 +22,59 @@ class AuthService {
         'full_name': fullName,
         'role': role,
       });
+
+      return UserModel(
+        id: response.user!.id,
+        email: email,
+        fullName: fullName,
+        role: role,
+      );
     }
+    return null;
   }
 
-  // Get current user profile
-  Future<UserModel?> getCurrentUserProfile() async {
+  Future<UserModel?> signIn({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _supabase.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
+
+    if (response.user != null) {
+      final userData = await _supabase
+          .from('users')
+          .select()
+          .eq('id', response.user!.id)
+          .single();
+
+      return UserModel.fromJson(userData);
+    }
+    return null;
+  }
+
+  Future<UserModel?> getCurrentUser() async {
     final user = _supabase.auth.currentUser;
     if (user == null) return null;
 
     try {
-      final response = await _supabase
+      final userData = await _supabase
           .from('users')
           .select()
           .eq('id', user.id)
           .single();
 
-      return UserModel.fromJson(response);
+      return UserModel.fromJson(userData);
     } catch (e) {
-      print('Error getting user profile: $e');
+      print('Error getting current user: $e');
       return null;
     }
   }
 
-  // Check if user is authenticated
-  bool get isAuthenticated => _supabase.auth.currentUser != null;
+  Future<void> signOut() async {
+    await _supabase.auth.signOut();
+  }
 
-  // Get current user ID
-  String? get currentUserId => _supabase.auth.currentUser?.id;
+  User? get currentUser => _supabase.auth.currentUser;
 }

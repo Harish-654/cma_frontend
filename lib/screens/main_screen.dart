@@ -4,20 +4,16 @@ import 'page_two.dart';
 import 'page_three.dart';
 import 'page_four.dart';
 
-
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
-
 
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
 
-
 class _MainScreenState extends State<MainScreen>
     with AutomaticKeepAliveClientMixin {
   int _currentIndex = 0;
-
 
   void _changePage(int index) {
     setState(() {
@@ -25,24 +21,21 @@ class _MainScreenState extends State<MainScreen>
     });
   }
 
-
   @override
   bool get wantKeepAlive => true;
-
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
 
-
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          PageOne(onNavigateToPage: _changePage),
-          PageTwo(),
-          PageFour(),  // Feedback now 3rd
-          PageThree(), // Profile now 4th (last)
+          PageOne(onNavigateToPage: _changePage),  // ✅ Widget, not function
+          PageTwo(),                                 // ✅ Widget
+          PageFour(),                                // ✅ Feedback 3rd
+          PageThree(),                               // ✅ Profile 4th (last)
         ],
       ),
       bottomNavigationBar: Container(
@@ -64,19 +57,17 @@ class _MainScreenState extends State<MainScreen>
           children: [
             _buildNavItem(Icons.home, 'Calendar', 0),
             _buildNavItem(Icons.explore, 'Explore', 1),
-            _buildNavItem(Icons.feedback, 'Feedback', 2),  // Feedback 3rd
-            _buildNavItem(Icons.person, 'Profile', 3),     // Profile last
+            _buildNavItem(Icons.feedback, 'Feedback', 2),
+            _buildNavItem(Icons.person, 'Profile', 3),
           ],
         ),
       ),
     );
   }
 
-
   Widget _buildNavItem(IconData icon, String label, int index) {
     final isSelected = _currentIndex == index;
     final colorScheme = Theme.of(context).colorScheme;
-
 
     return GestureDetector(
       onTap: () => _changePage(index),

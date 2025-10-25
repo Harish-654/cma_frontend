@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import '../models/grievance_model.dart';
-import '../services/grievance_service.dart';
-import '../main.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PageFour extends StatefulWidget {
   const PageFour({super.key});
@@ -11,118 +8,192 @@ class PageFour extends StatefulWidget {
   State<PageFour> createState() => _PageFourState();
 }
 
-class _PageFourState extends State<PageFour>
-    with SingleTickerProviderStateMixin {
-  final GrievanceService _grievanceService = GrievanceService();
+class _PageFourState extends State<PageFour> with SingleTickerProviderStateMixin {
+  final SupabaseClient _supabase = Supabase.instance.client;
+  final PageController _pageController = PageController();
   
-  List<GrievanceModel> allGrievances = [];
-  List<GrievanceModel> priorityGrievances = [];
-  Map<String, bool> userUpvotes = {};
-  
-  bool _isLoading = true;
-  late TabController _tabController;
+  List<Map<String, dynamic>> grievances = [];
+  bool isLoading = true;
+  bool hasPosted = false;
+  String? userGrievanceId;
+  int currentPage = 0;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _loadData();
-    _setupRealtimeSubscription();
+    _loadGrievances();
+    _checkIfUserHasPosted();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
-  void _setupRealtimeSubscription() {
-    _grievanceService.subscribeToGrievances((grievances) {
-      if (mounted) {
-        _loadData();
-      }
-    });
-  }
-
-  Future<void> _loadData() async {
-    if (!mounted) return;
-
-    setState(() => _isLoading = true);
-
+  Future<void> _checkIfUserHasPosted() async {
     try {
-      final all = await _grievanceService.getAllGrievances();
-      final priority = await _grievanceService.getPriorityGrievances();
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
 
-      Map<String, bool> upvotes = {};
-      for (var grievance in all) {
-        upvotes[grievance.id] = await _grievanceService.hasUserUpvoted(grievance.id);
-      }
+      final response = await _supabase
+          .from('grievances')
+          .select()
+          .eq('user_id', userId)
+          .maybeSingle();
 
       if (mounted) {
         setState(() {
-          allGrievances = all;
-          priorityGrievances = priority;
-          userUpvotes = upvotes;
-          _isLoading = false;
+          hasPosted = response != null;
+          userGrievanceId = response?['id'];
+        });
+      }
+    } catch (e) {
+      print('Error checking if user posted: $e');
+    }
+  }
+
+  Future<void> _loadGrievances() async {
+    try {
+      setState(() => isLoading = true);
+
+      final response = await _supabase
+          .from('grievances')
+          .select()
+          .order('created_at', ascending: false);
+
+      if (mounted) {
+        setState(() {
+          grievances = List<Map<String, dynamic>>.from(response);
+          isLoading = false;
         });
       }
     } catch (e) {
       print('Error loading grievances: $e');
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() => isLoading = false);
       }
     }
   }
 
-  Future<void> _handleUpvote(GrievanceModel grievance) async {
-    final hasUpvoted = userUpvotes[grievance.id] ?? false;
+  List<Map<String, dynamic>> get sortedByTime {
+    List<Map<String, dynamic>> sorted = List.from(grievances);
+    sorted.sort((a, b) => DateTime.parse(b['created_at']).compareTo(DateTime.parse(a['created_at'])));
+    return sorted;
+  }
 
-    if (hasUpvoted) {
-      final success = await _grievanceService.removeUpvote(grievance.id);
-      if (success) {
-        setState(() {
-          userUpvotes[grievance.id] = false;
-        });
-        _loadData();
-      }
-    } else {
-      final success = await _grievanceService.upvoteGrievance(grievance.id);
-      if (success) {
-        setState(() {
-          userUpvotes[grievance.id] = true;
-        });
-        _loadData();
+  List<Map<String, dynamic>> get sortedByUpvotes {
+    List<Map<String, dynamic>> sorted = List.from(grievances);
+    sorted.sort((a, b) => (b['upvotes'] ?? 0).compareTo(a['upvotes'] ?? 0));
+    return sorted;
+  }
+
+  Future<void> _toggleUpvote(String grievanceId) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+
+      final existingVote = await _supabase
+          .from('grievance_upvotes')
+          .select()
+          .eq('grievance_id', grievanceId)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      if (existingVote != null) {
+        await _supabase
+            .from('grievance_upvotes')
+            .delete()
+            .eq('grievance_id', grievanceId)
+            .eq('user_id', userId);
+
+        final currentGrievance = await _supabase
+            .from('grievances')
+            .select('upvotes')
+            .eq('id', grievanceId)
+            .single();
+
+        await _supabase
+            .from('grievances')
+            .update({'upvotes': (currentGrievance['upvotes'] ?? 1) - 1})
+            .eq('id', grievanceId);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('You have already upvoted this grievance'),
-            backgroundColor: Colors.orange,
-          ),
-        );
+        await _supabase.from('grievance_upvotes').insert({
+          'grievance_id': grievanceId,
+          'user_id': userId,
+        });
+
+        final currentGrievance = await _supabase
+            .from('grievances')
+            .select('upvotes')
+            .eq('id', grievanceId)
+            .single();
+
+        await _supabase
+            .from('grievances')
+            .update({'upvotes': (currentGrievance['upvotes'] ?? 0) + 1})
+            .eq('id', grievanceId);
       }
+
+      await _loadGrievances();
+    } catch (e) {
+      print('Error toggling upvote: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error updating upvote: $e')),
+      );
+    }
+  }
+
+  Future<bool> _hasUserUpvoted(String grievanceId) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return false;
+
+      final response = await _supabase
+          .from('grievance_upvotes')
+          .select()
+          .eq('grievance_id', grievanceId)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      return response != null;
+    } catch (e) {
+      print('Error checking upvote: $e');
+      return false;
     }
   }
 
   void _showAddGrievanceDialog() {
-    showDialog(
+    if (hasPosted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('You can only post one grievance'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
       context: context,
-      builder: (context) => _AddGrievanceDialog(
-        onSubmit: (message) async {
-          final grievance = await _grievanceService.createGrievance(message);
-          if (grievance != null) {
-            _loadData();
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Grievance posted successfully'),
-                  backgroundColor: Color(0xFF6750A4),
-                ),
-              );
-            }
-          }
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _AddGrievanceSheet(
+        onGrievanceAdded: () {
+          _loadGrievances();
+          _checkIfUserHasPosted();
         },
       ),
     );
+  }
+
+  void _switchToPage(int page) {
+    _pageController.animateToPage(
+      page,
+      duration: Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+    setState(() => currentPage = page);
   }
 
   @override
@@ -132,72 +203,122 @@ class _PageFourState extends State<PageFour>
       body: SafeArea(
         child: Column(
           children: [
+            // Header with title and add button
             Padding(
-              padding: EdgeInsets.all(16),
+              padding: EdgeInsets.all(20),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     'Grievances',
                     style: TextStyle(
-                      fontSize: 34,
+                      fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1C1B1F),
-                      letterSpacing: -1.0,
+                      color: Color(0xFF1D1D1F),
                     ),
                   ),
-                  IconButton(
-                    onPressed: _showAddGrievanceDialog,
-                    icon: Container(
-                      padding: EdgeInsets.all(8),
-                      decoration: BoxDecoration(
+                  if (!hasPosted)
+                    IconButton(
+                      onPressed: _showAddGrievanceDialog,
+                      icon: Icon(
+                        Icons.add_circle,
                         color: Color(0xFF6750A4),
-                        shape: BoxShape.circle,
+                        size: 32,
                       ),
-                      child: Icon(Icons.add, color: Colors.white, size: 20),
                     ),
-                  ),
                 ],
               ),
             ),
 
-            Container(
-              margin: EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: Color(0xFF2A2A2A),
-                borderRadius: BorderRadius.circular(100),
-              ),
-              child: TabBar(
-                controller: _tabController,
-                indicator: BoxDecoration(
-                  color: Color(0xFF4A4A4A),
-                  borderRadius: BorderRadius.circular(100),
+            // Toggle Switch
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Color(0xFF2D2D2D),
+                  borderRadius: BorderRadius.circular(24),
                 ),
-                indicatorSize: TabBarIndicatorSize.tab,
-                dividerColor: Colors.transparent,
-                labelColor: Colors.white,
-                unselectedLabelColor: Colors.white60,
-                labelStyle: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                ),
-                tabs: [
-                  Tab(text: 'All'),
-                  Tab(text: 'Priority'),
-                ],
-              ),
-            ),
-
-            SizedBox(height: 16),
-
-            Expanded(
-              child: _isLoading
-                  ? Center(child: CircularProgressIndicator(color: Color(0xFF6750A4)))
-                  : TabBarView(
-                      controller: _tabController,
+                child: Stack(
+                  children: [
+                    // Animated background slider
+                    AnimatedPositioned(
+                      duration: Duration(milliseconds: 250),
+                      curve: Curves.easeInOut,
+                      left: currentPage == 0 ? 4 : null,
+                      right: currentPage == 1 ? 4 : null,
+                      top: 4,
+                      bottom: 4,
+                      width: MediaQuery.of(context).size.width / 2 - 28,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Color(0xFF424242),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                    ),
+                    // Buttons
+                    Row(
                       children: [
-                        _buildGrievancesList(allGrievances),
-                        _buildGrievancesList(priorityGrievances),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => _switchToPage(0),
+                            child: Container(
+                              alignment: Alignment.center,
+                              child: Text(
+                                'All',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: currentPage == 0
+                                      ? Colors.white
+                                      : Colors.white.withOpacity(0.6),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => _switchToPage(1),
+                            child: Container(
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Priority',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: currentPage == 1
+                                      ? Colors.white
+                                      : Colors.white.withOpacity(0.6),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            SizedBox(height: 20),
+
+            // PageView for swipeable content
+            Expanded(
+              child: isLoading
+                  ? Center(child: CircularProgressIndicator())
+                  : PageView(
+                      controller: _pageController,
+                      onPageChanged: (index) {
+                        setState(() => currentPage = index);
+                      },
+                      children: [
+                        // All (sorted by time)
+                        _buildGrievancesList(sortedByTime),
+                        // Priority (sorted by upvotes)
+                        _buildGrievancesList(sortedByUpvotes),
                       ],
                     ),
             ),
@@ -207,20 +328,17 @@ class _PageFourState extends State<PageFour>
     );
   }
 
-  Widget _buildGrievancesList(List<GrievanceModel> grievances) {
-    if (grievances.isEmpty) {
+  Widget _buildGrievancesList(List<Map<String, dynamic>> list) {
+    if (list.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.feedback_outlined, size: 64, color: Colors.grey[400]),
+            Icon(Icons.feedback_outlined, size: 64, color: Colors.grey),
             SizedBox(height: 16),
             Text(
               'No grievances yet',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.grey),
             ),
           ],
         ),
@@ -228,277 +346,344 @@ class _PageFourState extends State<PageFour>
     }
 
     return ListView.builder(
-      padding: EdgeInsets.fromLTRB(16, 0, 16, 100),
-      itemCount: grievances.length,
+      padding: EdgeInsets.symmetric(horizontal: 20),
+      itemCount: list.length,
       itemBuilder: (context, index) {
-        return _buildGrievanceCard(grievances[index]);
+        final grievance = list[index];
+        return FutureBuilder<bool>(
+          future: _hasUserUpvoted(grievance['id']),
+          builder: (context, snapshot) {
+            final hasUpvoted = snapshot.data ?? false;
+            return _GrievanceCard(
+              userName: grievance['user_name'] ?? 'Anonymous',
+              timestamp: grievance['created_at'],
+              message: grievance['message'] ?? '',
+              upvotes: grievance['upvotes'] ?? 0,
+              hasUpvoted: hasUpvoted,
+              onUpvote: () => _toggleUpvote(grievance['id']),
+            );
+          },
+        );
       },
     );
   }
+}
 
-  Widget _buildGrievanceCard(GrievanceModel grievance) {
-    final hasUpvoted = userUpvotes[grievance.id] ?? false;
-    final isOwnGrievance = grievance.userId == supabase.auth.currentUser?.id;
+class _GrievanceCard extends StatelessWidget {
+  final String userName;
+  final String timestamp;
+  final String message;
+  final int upvotes;
+  final bool hasUpvoted;
+  final VoidCallback onUpvote;
 
+  const _GrievanceCard({
+    required this.userName,
+    required this.timestamp,
+    required this.message,
+    required this.upvotes,
+    required this.hasUpvoted,
+    required this.onUpvote,
+  });
+
+  String _formatTimestamp(String timestamp) {
+    try {
+      final dateTime = DateTime.parse(timestamp);
+      final now = DateTime.now();
+      final difference = now.difference(dateTime);
+
+      if (difference.inDays > 0) {
+        return '${difference.inDays}d ago';
+      } else if (difference.inHours > 0) {
+        return '${difference.inHours}h ago';
+      } else if (difference.inMinutes > 0) {
+        return '${difference.inMinutes}m ago';
+      } else {
+        return 'Just now';
+      }
+    } catch (e) {
+      return timestamp;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      margin: EdgeInsets.only(bottom: 12),
+      margin: EdgeInsets.only(bottom: 16),
+      padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
+            blurRadius: 10,
             offset: Offset(0, 2),
           ),
         ],
       ),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Color(0xFF6750A4).withOpacity(0.1),
-                  child: Text(
-                    grievance.userName.isNotEmpty
-                        ? grievance.userName[0].toUpperCase()
-                        : '?',
-                    style: TextStyle(
-                      color: Color(0xFF6750A4),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: Color(0xFF6750A4).withOpacity(0.2),
+                child: Text(
+                  userName[0].toUpperCase(),
+                  style: TextStyle(
+                    color: Color(0xFF6750A4),
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        grievance.userName,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1C1B1F),
-                        ),
-                      ),
-                      Text(
-                        DateFormat('MMM dd, yyyy • hh:mm a').format(grievance.createdAt),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (isOwnGrievance)
-                  IconButton(
-                    onPressed: () async {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: Text('Delete Grievance'),
-                          content: Text('Are you sure you want to delete this grievance?'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: Text('Cancel'),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              child: Text('Delete', style: TextStyle(color: Colors.red)),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (confirm == true) {
-                        await _grievanceService.deleteGrievance(grievance.id);
-                        _loadData();
-                      }
-                    },
-                    icon: Icon(Icons.delete_outline, size: 20, color: Colors.grey[600]),
-                  ),
-              ],
-            ),
-
-            SizedBox(height: 12),
-
-            Text(
-              grievance.message,
-              style: TextStyle(
-                fontSize: 15,
-                height: 1.5,
-                color: Color(0xFF1C1B1F),
               ),
-            ),
-
-            SizedBox(height: 16),
-
-            InkWell(
-              onTap: () => _handleUpvote(grievance),
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: hasUpvoted
-                      ? Color(0xFF6750A4).withOpacity(0.1)
-                      : Colors.grey[100],
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: hasUpvoted
-                        ? Color(0xFF6750A4)
-                        : Colors.grey[300]!,
-                    width: 1.5,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      hasUpvoted ? Icons.arrow_upward : Icons.arrow_upward_outlined,
-                      size: 18,
-                      color: hasUpvoted ? Color(0xFF6750A4) : Colors.grey[700],
-                    ),
-                    SizedBox(width: 6),
                     Text(
-                      '${grievance.upvoteCount}',
+                      userName,
                       style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: hasUpvoted ? Color(0xFF6750A4) : Colors.grey[700],
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1D1D1F),
+                      ),
+                    ),
+                    Text(
+                      _formatTimestamp(timestamp),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF6B7280),
                       ),
                     ),
                   ],
                 ),
               ),
+            ],
+          ),
+          SizedBox(height: 12),
+          Text(
+            message,
+            style: TextStyle(
+              fontSize: 14,
+              color: Color(0xFF1D1D1F),
+              height: 1.5,
             ),
-          ],
-        ),
+          ),
+          SizedBox(height: 12),
+          GestureDetector(
+            onTap: onUpvote,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: hasUpvoted
+                    ? Color(0xFF6750A4).withOpacity(0.1)
+                    : Colors.grey.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: hasUpvoted ? Color(0xFF6750A4) : Colors.grey,
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'I too face the same issue',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: hasUpvoted ? Color(0xFF6750A4) : Color(0xFF6B7280),
+                    ),
+                  ),
+                  SizedBox(width: 6),
+                  Icon(
+                    Icons.arrow_upward,
+                    size: 16,
+                    color: hasUpvoted ? Color(0xFF6750A4) : Color(0xFF6B7280),
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    upvotes.toString(),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: hasUpvoted ? Color(0xFF6750A4) : Color(0xFF6B7280),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _AddGrievanceDialog extends StatefulWidget {
-  final Function(String) onSubmit;
+class _AddGrievanceSheet extends StatefulWidget {
+  final VoidCallback onGrievanceAdded;
 
-  const _AddGrievanceDialog({required this.onSubmit});
+  const _AddGrievanceSheet({required this.onGrievanceAdded});
 
   @override
-  State<_AddGrievanceDialog> createState() => _AddGrievanceDialogState();
+  State<_AddGrievanceSheet> createState() => _AddGrievanceSheetState();
 }
 
-class _AddGrievanceDialogState extends State<_AddGrievanceDialog> {
-  final _controller = TextEditingController();
-  bool _isSubmitting = false;
+class _AddGrievanceSheetState extends State<_AddGrievanceSheet> {
+  final SupabaseClient _supabase = Supabase.instance.client;
+  final TextEditingController messageController = TextEditingController();
+  bool isProcessing = false;
 
   @override
   void dispose() {
-    _controller.dispose();
+    messageController.dispose();
     super.dispose();
+  }
+
+  Future<void> _submitGrievance() async {
+    if (messageController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please enter your grievance'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => isProcessing = true);
+
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) {
+        throw Exception('Not authenticated');
+      }
+
+      final existing = await _supabase
+          .from('grievances')
+          .select()
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      if (existing != null) {
+        throw Exception('You have already posted a grievance');
+      }
+
+      final userData = await _supabase
+          .from('users')
+          .select('full_name')
+          .eq('id', userId)
+          .single();
+
+      await _supabase.from('grievances').insert({
+        'user_id': userId,
+        'user_name': userData['full_name'] ?? 'Anonymous',
+        'message': messageController.text.trim(),
+        'upvotes': 0,
+      });
+
+      if (mounted) {
+        Navigator.pop(context);
+        widget.onGrievanceAdded();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Grievance posted successfully!')),
+        );
+      }
+    } catch (e) {
+      print('Error submitting grievance: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isProcessing = false);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
+    return Container(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+      ),
+      child: SingleChildScrollView(
         padding: EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Post Grievance',
+              'Post a Grievance',
               style: TextStyle(
-                fontSize: 24,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF1C1B1F),
+                color: Color(0xFF1D1D1F),
               ),
             ),
-            SizedBox(height: 16),
+            SizedBox(height: 8),
+            Text(
+              'You can only post one grievance',
+              style: TextStyle(
+                fontSize: 14,
+                color: Color(0xFF6B7280),
+              ),
+            ),
+            SizedBox(height: 24),
             TextField(
-              controller: _controller,
+              controller: messageController,
+              enabled: !isProcessing,
               maxLines: 5,
               maxLength: 500,
               decoration: InputDecoration(
-                hintText: 'Describe your grievance or feedback...',
+                labelText: 'Your Grievance',
+                hintText: 'Describe the issue...',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Color(0xFF6750A4), width: 2),
-                ),
+                filled: true,
+                fillColor: Color(0xFFF9FAFB),
               ),
             ),
-            SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _isSubmitting ? null : () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: Text('Cancel'),
+            SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: isProcessing ? null : _submitGrievance,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Color(0xFF6750A4),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _isSubmitting
-                        ? null
-                        : () async {
-                            if (_controller.text.trim().isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Please enter a message')),
-                              );
-                              return;
-                            }
-
-                            setState(() => _isSubmitting = true);
-                            await widget.onSubmit(_controller.text.trim());
-                            if (mounted) {
-                              Navigator.pop(context);
-                            }
-                          },
-                    style: ElevatedButton.styleFrom(
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                      backgroundColor: Color(0xFF6750A4),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                child: isProcessing
+                    ? CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2)
+                    : Text(
+                        'Post Grievance',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                    child: _isSubmitting
-                        ? SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : Text(
-                            'Post',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),

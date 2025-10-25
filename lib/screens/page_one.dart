@@ -5,29 +5,28 @@ import 'task_view_page.dart';
 import '../services/auth_service.dart';
 import '../models/meeting.dart';
 import '../services/task_service.dart';
-import '../main.dart'; // For supabase instance
-// Add this line
+import '../main.dart';
 
 class PageOne extends StatefulWidget {
-  final Function(int)? onNavigateToPage; // ← Add this
+  final Function(int)? onNavigateToPage;
 
-  const PageOne({super.key, this.onNavigateToPage}); // ← Add this
+  PageOne({this.onNavigateToPage});
 
   @override
   State<PageOne> createState() => _PageOneState();
 }
 
-class _PageOneState extends State<PageOne> {
+class _PageOneState extends State<PageOne> with AutomaticKeepAliveClientMixin {
   late CalendarController _calendarController;
   late MeetingDataSource _dataSource;
   final TaskService _taskService = TaskService();
   final AuthService _authService = AuthService();
   bool _isLoading = true;
-  final bool _isDisposed = false;
+  bool _isDisposed = false;
   bool _hasLoadedData = false;
 
   @override
-  bool get wantKeepAlive => true; // ← Add this flag
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -35,39 +34,37 @@ class _PageOneState extends State<PageOne> {
     _calendarController = CalendarController();
     _dataSource = MeetingDataSource([]);
     if (!_hasLoadedData) {
-      // ← Only load once
       _loadTasks();
     }
   }
 
-  // Load tasks from Supabase
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
+  }
+
   Future<void> _loadTasks() async {
     if (_isDisposed || !mounted) return;
-
     if (mounted) {
       setState(() => _isLoading = true);
     }
 
     try {
-      // Load from BOTH Supabase and Local Storage
       final tasks = await _taskService.getAllUserTasks();
-
       if (_isDisposed || !mounted) return;
-
       setState(() {
         _dataSource = MeetingDataSource(tasks);
         _isLoading = false;
+        _hasLoadedData = true;
       });
     } catch (e) {
       print('Error loading tasks: $e');
-
       if (_isDisposed || !mounted) return;
-
       setState(() => _isLoading = false);
     }
   }
 
-  // Add a method to refresh data manually
   Future<void> refreshTasks() async {
     _hasLoadedData = false;
     await _loadTasks();
@@ -75,6 +72,8 @@ class _PageOneState extends State<PageOne> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+    
     return Container(
       color: Theme.of(context).colorScheme.surfaceContainerLow,
       child: SafeArea(
@@ -97,17 +96,14 @@ class _PageOneState extends State<PageOne> {
                 ],
               ),
             ),
-
-            // Google Calendar-style Month View
+            // Calendar
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface,
                   boxShadow: [
                     BoxShadow(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.shadow.withOpacity(0.1),
+                      color: Theme.of(context).colorScheme.shadow.withOpacity(0.1),
                       blurRadius: 15,
                       offset: Offset(0, 5),
                     ),
@@ -119,8 +115,7 @@ class _PageOneState extends State<PageOne> {
                     controller: _calendarController,
                     dataSource: _dataSource,
                     monthViewSettings: MonthViewSettings(
-                      appointmentDisplayMode:
-                          MonthAppointmentDisplayMode.appointment,
+                      appointmentDisplayMode: MonthAppointmentDisplayMode.appointment,
                       appointmentDisplayCount: 4,
                       showAgenda: false,
                       monthCellStyle: MonthCellStyle(
@@ -135,9 +130,7 @@ class _PageOneState extends State<PageOne> {
                         ),
                         leadingDatesTextStyle: TextStyle(
                           fontSize: 14,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withOpacity(0.38),
+                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.38),
                         ),
                       ),
                     ),
@@ -165,48 +158,37 @@ class _PageOneState extends State<PageOne> {
                       ),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    appointmentBuilder:
-                        (
-                          BuildContext context,
-                          CalendarAppointmentDetails details,
-                        ) {
-                          final Meeting meeting = details.appointments.first;
-                          return Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 2,
-                              vertical: 1,
-                            ),
-                            decoration: BoxDecoration(
-                              color: meeting.background,
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                            child: Text(
-                              meeting.category ?? 'Untitled',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          );
-                        },
-
-                    // In page_one.dart, find where you navigate to TaskViewPage:
+                    appointmentBuilder: (BuildContext context, CalendarAppointmentDetails details) {
+                      final Meeting meeting = details.appointments.first;
+                      return Container(
+                        padding: EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: meeting.background,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          meeting.category ?? 'Untitled',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    },
                     onTap: (CalendarTapDetails details) async {
                       if (details.date != null) {
                         final tasksList = <Meeting>[];
-                        for (var appointment
-                            in _dataSource.appointments ?? []) {
+                        for (var appointment in _dataSource.appointments ?? []) {
                           if (appointment is Meeting) {
                             tasksList.add(appointment);
                           }
                         }
 
-                        // Get current user role
-                        final userProfile = await _authService
-                            .getCurrentUserProfile();
+                        // Get current user role - FIXED METHOD NAME
+                        final userProfile = await _authService.getCurrentUser();
                         final isRep = userProfile?.role == 'representative';
 
                         await Navigator.of(context).push(
@@ -217,16 +199,13 @@ class _PageOneState extends State<PageOne> {
                               onDeleteTask: (task) async {
                                 try {
                                   await _taskService.deleteTaskAny(task);
-                                  await _loadTasks(); // Reload after delete
-
+                                  await _loadTasks();
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(content: Text('Task deleted')),
                                   );
                                 } catch (e) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Error deleting task'),
-                                    ),
+                                    SnackBar(content: Text('Error deleting task')),
                                   );
                                 }
                               },
@@ -235,8 +214,6 @@ class _PageOneState extends State<PageOne> {
                             ),
                           ),
                         );
-
-                        // Reload tasks after returning from TaskView
                         await _loadTasks();
                       }
                     },
@@ -304,5 +281,3 @@ class MeetingDataSource extends CalendarDataSource {
     return meetingData;
   }
 }
-
-// REMOVE the Meeting class from here - it's now in models/meeting.dart

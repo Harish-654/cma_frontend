@@ -5,7 +5,7 @@ import '../services/class_service.dart';
 import '../models/user_model.dart';
 import '../models/class_model.dart';
 import 'main_screen.dart';
-import 'auth/login_page.dart';
+import 'hall_booking_page.dart';
 
 class PageThree extends StatefulWidget {
   const PageThree({super.key});
@@ -17,372 +17,567 @@ class PageThree extends StatefulWidget {
 class _PageThreeState extends State<PageThree> {
   final AuthService _authService = AuthService();
   final ClassService _classService = ClassService();
-  UserModel? _currentUser;
-  List<ClassModel> _myClasses = [];
-  bool _isLoading = true;
-  bool _isLoadingData = false;
+  
+  UserModel? currentUser;
+  List<ClassModel> classes = [];
+  bool isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _loadUserAndClasses();
   }
 
-  Future<void> _loadUserData() async {
-    if (!mounted || _isLoadingData) return;
-
-    _isLoadingData = true;
-    if (mounted) {
-      setState(() => _isLoading = true);
-    }
-
+  Future<void> _loadUserAndClasses() async {
+    setState(() => isLoading = true);
+    
     try {
-      final user = await _authService.getCurrentUserProfile();
-      final classes = await _classService.getMyClasses();
-
-      if (!mounted) {
-        _isLoadingData = false;
-        return;
-      }
-
-      setState(() {
-        _currentUser = user;
-        _myClasses = classes;
-        _isLoading = false;
-      });
-    } catch (e) {
-      print('Error loading user data: $e');
-
-      if (!mounted) {
-        _isLoadingData = false;
-        return;
-      }
-
-      setState(() => _isLoading = false);
-    } finally {
-      _isLoadingData = false;
-    }
-  }
-
-  Future<void> _logout() async {
-    try {
-      await _authService.signOut();
-
-      if (!mounted) return;
-
-      // Force navigation to login page
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => LoginPage()),
-        (route) => false, // Remove all previous routes
-      );
-    } catch (e) {
-      print('Error logging out: $e');
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error logging out: ${e.toString()}')),
-      );
-    }
-  }
-
-  Future<void> _showCreateClassDialog() async {
-    if (!mounted) return;
-
-    final nameController = TextEditingController();
-    final descController = TextEditingController();
-    final batchController = TextEditingController();
-
-    final result = await showDialog<String?>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        // ... same code ...
-      ),
-    );
-
-    nameController.dispose();
-    descController.dispose();
-    batchController.dispose();
-
-    if (!mounted) return;
-
-    // Show success dialog
-    if (result != null && result.isNotEmpty) {
-      await showDialog(
-        context: context,
-        builder: (codeContext) => AlertDialog(
-          title: Text('Class Created! 🎉'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Share this code with your students:'),
-              SizedBox(height: 16),
-              Container(
-                padding: EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      result,
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 4,
-                        color: Colors.black,
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                    IconButton(
-                      icon: Icon(Icons.copy),
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: result));
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(SnackBar(content: Text('Code copied!')));
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.of(codeContext).pop(),
-              child: Text('Got it!'),
-            ),
-          ],
-        ),
-      );
-
-      // Reload classes after dialog closes
+      final user = await _authService.getCurrentUser();
+      final userClasses = await _classService.getMyClasses();
+      
       if (mounted) {
-        _loadUserData();
+        setState(() {
+          currentUser = user;
+          classes = userClasses;
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading user and classes: $e');
+      if (mounted) {
+        setState(() => isLoading = false);
       }
     }
-
-    // REMOVE THIS LINE - Don't navigate, we're already on MainScreen!
-    // Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => MainScreen()));
   }
 
-  Future<void> _showJoinClassDialog() async {
-    if (!mounted) return;
-
-    final codeController = TextEditingController();
-
-    final joined = await showDialog<bool>(
+  void _showAddClassDialog() {
+    showModalBottomSheet(
       context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        // ... same code ...
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _AddClassBottomSheet(
+        onClassAdded: _loadUserAndClasses,
       ),
     );
-
-    codeController.dispose();
-
-    if (!mounted) return;
-
-    // Show success message if joined
-    if (joined == true) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Welcome to your class!')));
-
-      // Reload classes
-      _loadUserData();
-    }
-
-    // REMOVE THIS LINE - Don't navigate!
-    // Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => MainScreen()));
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    if (_isLoading) {
-      return Scaffold(
-        backgroundColor: colorScheme.surface,
-        body: Center(
-          child: CircularProgressIndicator(color: colorScheme.primary),
-        ),
-      );
+    if (isLoading) {
+      return Center(child: CircularProgressIndicator());
     }
 
+    if (currentUser == null) {
+      return Center(child: Text('Not logged in'));
+    }
+
+    final isRepresentative = currentUser!.role == 'representative';
+
     return Scaffold(
-      backgroundColor: colorScheme.surface,
+      backgroundColor: Color(0xFFF5F5F5),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, 100),
-          child: Column(
-            children: [
-              // Profile Header
-              Container(
-                padding: EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: colorScheme.surface,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              children: [
+                // Profile Section
+                Column(
                   children: [
                     CircleAvatar(
                       radius: 50,
-                      backgroundColor: colorScheme.primaryContainer,
-                      child: Icon(
-                        Icons.person,
-                        size: 50,
-                        color: colorScheme.onPrimaryContainer,
-                      ),
+                      backgroundColor: Color(0xFF6B7280).withOpacity(0.2),
+                      child: Icon(Icons.person, size: 50, color: Color(0xFF6B7280)),
                     ),
                     SizedBox(height: 16),
                     Text(
-                      _currentUser?.fullName ?? 'User',
+                      currentUser!.name,
                       style: TextStyle(
-                        fontSize: 24,
+                        fontSize: 28,
                         fontWeight: FontWeight.bold,
-                        color: colorScheme.onSurface,
+                        color: Color(0xFF1D1D1F),
                       ),
                     ),
                     SizedBox(height: 4),
                     Text(
-                      _currentUser?.email ?? '',
+                      currentUser!.email,
                       style: TextStyle(
-                        fontSize: 14,
-                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 16,
+                        color: Color(0xFF6B7280),
                       ),
                     ),
                     SizedBox(height: 12),
                     Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer,
+                        color: Color(0xFF6750A4).withOpacity(0.1),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        _currentUser?.role == 'representative'
-                            ? 'Class Representative'
-                            : 'Student',
+                        currentUser!.role == 'representative' ? 'Representative' : 'Student',
                         style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onPrimaryContainer,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF6750A4),
                         ),
                       ),
                     ),
                   ],
                 ),
-              ),
 
-              SizedBox(height: 24),
+                SizedBox(height: 32),
 
-              // My Classes Section
-              Container(
-                padding: EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: colorScheme.surface,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                // Hall Booking Button (Representatives only)
+                if (isRepresentative) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => HallBookingPage()),
+                        );
+                      },
+                      icon: Icon(Icons.meeting_room, color: Colors.white),
+                      label: Text('Hall Booking'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Color(0xFF007AFF),
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                ],
+
+                // My Classes Section
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.school, color: colorScheme.primary),
+                        Icon(Icons.school, color: Color(0xFF6750A4), size: 24),
                         SizedBox(width: 8),
                         Text(
                           'My Classes',
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color: colorScheme.onSurface,
+                            color: Color(0xFF1D1D1F),
                           ),
-                        ),
-                        Spacer(),
-                        IconButton(
-                          icon: Icon(Icons.add),
-                          onPressed: _currentUser?.role == 'representative'
-                              ? _showCreateClassDialog
-                              : _showJoinClassDialog,
-                          color: colorScheme.primary,
                         ),
                       ],
                     ),
-                    SizedBox(height: 12),
-                    if (_myClasses.isEmpty)
-                      Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(24),
+                    IconButton(
+                      onPressed: _showAddClassDialog,
+                      icon: Icon(Icons.add_circle, color: Color(0xFF007AFF), size: 28),
+                    ),
+                  ],
+                ),
+
+                SizedBox(height: 16),
+
+                // Classes List
+                classes.isEmpty
+                    ? Container(
+                        padding: EdgeInsets.all(40),
+                        child: Column(
+                          children: [
+                            Icon(Icons.class_, size: 64, color: Color(0xFF9CA3AF)),
+                            SizedBox(height: 16),
+                            Text(
+                              'Not in any class. Join one!',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Color(0xFF6B7280),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : Column(
+                        children: classes.map((classItem) {
+                          return Container(
+                            margin: EdgeInsets.only(bottom: 12),
+                            padding: EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.05),
+                                  blurRadius: 10,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  classItem.name,
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1D1D1F),
+                                  ),
+                                ),
+                                if (classItem.description != null) ...[
+                                  SizedBox(height: 4),
+                                  Text(
+                                    classItem.description!,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Color(0xFF6B7280),
+                                    ),
+                                  ),
+                                ],
+                                SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Color(0xFF007AFF).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        classItem.classCode,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF007AFF),
+                                          fontFamily: 'monospace',
+                                        ),
+                                      ),
+                                    ),
+                                    if (classItem.batch != null) ...[
+                                      SizedBox(width: 8),
+                                      Container(
+                                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Color(0xFF6B7280).withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          classItem.batch!,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Color(0xFF6B7280),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+
+                SizedBox(height: 32),
+
+                // Logout Button
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton.icon(
+                    onPressed: () async {
+                      await _authService.signOut();
+                      if (mounted) {
+                        Navigator.pushReplacementNamed(context, '/login');
+                      }
+                    },
+                    icon: Icon(Icons.logout, color: Color(0xFFEF4444)),
+                    label: Text('Logout'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Color(0xFFEF4444),
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AddClassBottomSheet extends StatefulWidget {
+  final VoidCallback onClassAdded;
+
+  const _AddClassBottomSheet({required this.onClassAdded});
+
+  @override
+  State<_AddClassBottomSheet> createState() => _AddClassBottomSheetState();
+}
+
+class _AddClassBottomSheetState extends State<_AddClassBottomSheet> {
+  final ClassService _classService = ClassService();
+  bool isCreateMode = true;
+  bool isProcessing = false;
+
+  // Create class controllers
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController descriptionController = TextEditingController();
+  final TextEditingController batchController = TextEditingController();
+
+  // Join class controller
+  final TextEditingController classCodeController = TextEditingController();
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    descriptionController.dispose();
+    batchController.dispose();
+    classCodeController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _createClass() async {
+    if (nameController.text.trim().isEmpty) {
+      _showError('Please enter class name');
+      return;
+    }
+
+    setState(() => isProcessing = true);
+
+    try {
+      await _classService.createClass(
+        name: nameController.text.trim(),
+        description: descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+        batch: batchController.text.trim().isEmpty ? null : batchController.text.trim(),
+      );
+
+      if (mounted) {
+        Navigator.pop(context);
+        widget.onClassAdded();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Class created successfully!')),
+        );
+      }
+    } catch (e) {
+      print('Error creating class: $e');
+      _showError('Failed to create class');
+    } finally {
+      if (mounted) {
+        setState(() => isProcessing = false);
+      }
+    }
+  }
+
+  Future<void> _joinClass() async {
+    if (classCodeController.text.trim().isEmpty) {
+      _showError('Please enter class code');
+      return;
+    }
+
+    setState(() => isProcessing = true);
+
+    try {
+      await _classService.joinClass(classCodeController.text.trim());
+
+      if (mounted) {
+        Navigator.pop(context);
+        widget.onClassAdded();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Joined class successfully!')),
+        );
+      }
+    } catch (e) {
+      print('Error joining class: $e');
+      _showError(e.toString().replaceAll('Exception: ', ''));
+    } finally {
+      if (mounted) {
+        setState(() => isProcessing = false);
+      }
+    }
+  }
+
+  void _showError(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+      ),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Mode Switcher
+            Container(
+              decoration: BoxDecoration(
+                color: Color(0xFFF3F4F6),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: EdgeInsets.all(4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => isCreateMode = true),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isCreateMode ? Colors.white : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Center(
                           child: Text(
-                            _currentUser?.role == 'representative'
-                                ? 'No classes yet. Create one!'
-                                : 'Not in any class. Join one!',
+                            'Create Class',
                             style: TextStyle(
-                              color: colorScheme.onSurfaceVariant,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: isCreateMode ? Color(0xFF007AFF) : Color(0xFF6B7280),
                             ),
                           ),
                         ),
-                      )
-                    else
-                      ...(_myClasses.map((classItem) {
-                        final messenger = ScaffoldMessenger.of(context);
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: colorScheme.primaryContainer,
-                            child: Icon(
-                              Icons.class_,
-                              color: colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => isCreateMode = false),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: !isCreateMode ? Colors.white : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Join Class',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: !isCreateMode ? Color(0xFF007AFF) : Color(0xFF6B7280),
                             ),
                           ),
-                          title: Text(
-                            classItem.name,
-                            style: TextStyle(color: colorScheme.onSurface),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (classItem.batch != null)
-                                Text('Batch: ${classItem.batch}'),
-                              Text('Code: ${classItem.classCode}'),
-                            ],
-                          ),
-                          trailing: IconButton(
-                            icon: Icon(Icons.copy, size: 20),
-                            onPressed: () {
-                              Clipboard.setData(
-                                ClipboardData(text: classItem.classCode),
-                              );
-                              messenger.showSnackBar(
-                                SnackBar(content: Text('Code copied!')),
-                              );
-                            },
-                          ),
-                        );
-                      })),
-                  ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            SizedBox(height: 24),
+
+            // Create Class Form
+            if (isCreateMode) ...[
+              TextField(
+                controller: nameController,
+                enabled: !isProcessing,
+                decoration: InputDecoration(
+                  labelText: 'Class Name',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: Color(0xFFF9FAFB),
                 ),
               ),
-
-              SizedBox(height: 24),
-
-              // Logout
-              ListTile(
-                leading: Icon(Icons.logout, color: colorScheme.error),
-                title: Text(
-                  'Logout',
-                  style: TextStyle(color: colorScheme.error),
+              SizedBox(height: 16),
+              TextField(
+                controller: descriptionController,
+                enabled: !isProcessing,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  labelText: 'Description (Optional)',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: Color(0xFFF9FAFB),
                 ),
-                onTap: _logout,
+              ),
+              SizedBox(height: 16),
+              TextField(
+                controller: batchController,
+                enabled: !isProcessing,
+                decoration: InputDecoration(
+                  labelText: 'Batch (Optional)',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: Color(0xFFF9FAFB),
+                ),
+              ),
+              SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: isProcessing ? null : _createClass,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFF007AFF),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: isProcessing
+                      ? CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                      : Text(
+                          'Create Class',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                        ),
+                ),
               ),
             ],
-          ),
+
+            // Join Class Form
+            if (!isCreateMode) ...[
+              TextField(
+                controller: classCodeController,
+                enabled: !isProcessing,
+                textCapitalization: TextCapitalization.characters,
+                decoration: InputDecoration(
+                  labelText: 'Class Code',
+                  hintText: 'Enter 6-digit code',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: Color(0xFFF9FAFB),
+                ),
+              ),
+              SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: isProcessing ? null : _joinClass,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFF34C759),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: isProcessing
+                      ? CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                      : Text(
+                          'Join Class',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                        ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

@@ -52,6 +52,7 @@ class ClassService {
       for (var json in (repClasses as List)) {
         allClasses.add(ClassModel.fromJson(json));
       }
+      
       // Add member classes; avoid duplicates
       final repClassIds = allClasses.map((e) => e.id).toSet();
       for (var item in (memberResponse as List)) {
@@ -141,7 +142,7 @@ class ClassService {
       final classResponse = await _supabase
           .from('classes')
           .select()
-          .eq('class_code', classCode.toUpperCase())
+          .eq('class_code', classCode.trim().toUpperCase())
           .maybeSingle();
 
       print('Class response: $classResponse');
@@ -151,14 +152,15 @@ class ClassService {
         throw Exception('Invalid class code');
       }
 
-      print('Class found: ${classResponse['name']}');
+      final classId = classResponse['id'];
+      print('Class found: ${classResponse['name']} (ID: $classId)');
 
       // 2. Check if already member
       print('Step 2: Checking if already a member...');
       final existingMember = await _supabase
           .from('class_members')
           .select()
-          .eq('class_id', classResponse['id'])
+          .eq('class_id', classId)
           .eq('user_id', userId)
           .maybeSingle();
 
@@ -171,9 +173,27 @@ class ClassService {
 
       // 3. Join class
       print('Step 3: Inserting into class_members...');
-      final insertData = {'class_id': classResponse['id'], 'user_id': userId};
+      final insertData = {
+        'class_id': classId,
+        'user_id': userId,
+        'joined_at': DateTime.now().toIso8601String(),
+      };
       print('Insert data: $insertData');
+      
       await _supabase.from('class_members').insert(insertData);
+
+      // 4. Verify insertion
+      print('Step 4: Verifying insert...');
+      final verify = await _supabase
+          .from('class_members')
+          .select()
+          .eq('class_id', classId)
+          .eq('user_id', userId);
+      print('Verification result: $verify');
+
+      if (verify.isEmpty) {
+        throw Exception('Failed to join class - insert did not persist');
+      }
 
       print('SUCCESS: Joined class!');
     } catch (e, stackTrace) {
