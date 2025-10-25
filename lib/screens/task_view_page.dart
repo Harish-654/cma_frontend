@@ -15,7 +15,8 @@ class TaskViewPage extends StatefulWidget {
   final Function(int)? onNavigateToPage;
   final bool isRepresentative;
 
-  const TaskViewPage({super.key, 
+  const TaskViewPage({
+    super.key,
     required this.selectedDate,
     required this.allTasks,
     required this.onDeleteTask,
@@ -27,15 +28,9 @@ class TaskViewPage extends StatefulWidget {
   State<TaskViewPage> createState() => _TaskViewPageState();
 }
 
-class _TaskViewPageState extends State<TaskViewPage>
-    with SingleTickerProviderStateMixin {
+class _TaskViewPageState extends State<TaskViewPage> {
   late List<Meeting> todayTasks;
   String? expandedTaskId;
-  bool isSpeedDialOpen = false;
-  late AnimationController _animationController;
-  late Animation<double> _rotationAnimation;
-  late Animation<double> _forYouSlideAnimation;
-  late Animation<double> _forClassSlideAnimation;
 
   final TaskService _taskService = TaskService();
   final ClassService _classService = ClassService();
@@ -44,40 +39,6 @@ class _TaskViewPageState extends State<TaskViewPage>
   void initState() {
     super.initState();
     _loadTodayTasks();
-
-    _animationController = AnimationController(
-      vsync: this,
-      duration: Duration(milliseconds: 300),
-    );
-
-    _rotationAnimation = Tween<double>(begin: 0.0, end: 0.125).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
-    );
-
-    _forYouSlideAnimation = Tween<double>(begin: 0.0, end: -64.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-    );
-
-    _forClassSlideAnimation = Tween<double>(begin: 0.0, end: -128.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  void _toggleSpeedDial() {
-    setState(() {
-      isSpeedDialOpen = !isSpeedDialOpen;
-      if (isSpeedDialOpen) {
-        _animationController.forward();
-      } else {
-        _animationController.reverse();
-      }
-    });
   }
 
   void _loadTodayTasks() {
@@ -96,16 +57,15 @@ class _TaskViewPageState extends State<TaskViewPage>
   }
 
   void _toggleTaskCompletion(Meeting task) {
-    if (!mounted) return; // Add check
+    if (!mounted) return;
 
     setState(() {
       task.isCompleted = !task.isCompleted;
     });
   }
 
-  // Update _toggleTaskExpansion
   void _toggleTaskExpansion(Meeting task) {
-    if (!mounted) return; // Add check
+    if (!mounted) return;
 
     setState(() {
       if (expandedTaskId == task.id) {
@@ -116,11 +76,100 @@ class _TaskViewPageState extends State<TaskViewPage>
     });
   }
 
+  // Show option card for representatives
+  void _showTaskOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            SizedBox(height: 20),
+            
+            // Title
+            Text(
+              'Create Task',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'SF Pro Display',
+              ),
+            ),
+            SizedBox(height: 20),
+            
+            // FOR YOU option
+            ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Theme.of(context).colorScheme.secondary,
+                child: Icon(Icons.person, color: Theme.of(context).colorScheme.onSecondary),
+              ),
+              title: Text(
+                'For You',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'SF Pro Text',
+                ),
+              ),
+              subtitle: Text(
+                'Create a personal task for yourself',
+                style: TextStyle(fontFamily: 'SF Pro Text'),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _addRepresentativePersonalTask();
+              },
+            ),
+            
+            SizedBox(height: 10),
+            
+            // FOR CLASS option
+            ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.purple[400],
+                child: Icon(Icons.group, color: Colors.white),
+              ),
+              title: Text(
+                'For Class',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'SF Pro Text',
+                ),
+              ),
+              subtitle: Text(
+                'Assign task to all students in your class',
+                style: TextStyle(fontFamily: 'SF Pro Text'),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _addClassTask();
+              },
+            ),
+            
+            SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
   // For Students - Save to Supabase
-  // Update _addPersonalTask
   void _addPersonalTask() async {
-    if (!mounted) return; // Add at start
-    _toggleSpeedDial();
+    if (!mounted) return;
 
     showDialog(
       context: context,
@@ -130,7 +179,7 @@ class _TaskViewPageState extends State<TaskViewPage>
           try {
             await _taskService.createPersonalTask(task);
 
-            if (!mounted) return; // Check before setState
+            if (!mounted) return;
 
             setState(() {
               todayTasks.add(task);
@@ -138,7 +187,6 @@ class _TaskViewPageState extends State<TaskViewPage>
             });
 
             if (mounted) {
-              // Check before using context
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Task created successfully!'),
@@ -148,7 +196,6 @@ class _TaskViewPageState extends State<TaskViewPage>
             }
           } catch (e) {
             if (mounted) {
-              // Check before using context
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Error: ${e.toString()}'),
@@ -164,8 +211,7 @@ class _TaskViewPageState extends State<TaskViewPage>
 
   // For Representatives "For You" - Save to Local Storage
   void _addRepresentativePersonalTask() async {
-    if (!mounted) return; // Add at start
-    _toggleSpeedDial();
+    if (!mounted) return;
 
     showDialog(
       context: context,
@@ -176,7 +222,7 @@ class _TaskViewPageState extends State<TaskViewPage>
             task.isLocal = true;
             await _taskService.createLocalTask(task);
 
-            if (!mounted) return; // Check before setState
+            if (!mounted) return;
 
             setState(() {
               todayTasks.add(task);
@@ -184,7 +230,6 @@ class _TaskViewPageState extends State<TaskViewPage>
             });
 
             if (mounted) {
-              // Check before using context
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Personal task created locally!'),
@@ -194,7 +239,6 @@ class _TaskViewPageState extends State<TaskViewPage>
             }
           } catch (e) {
             if (mounted) {
-              // Check before using context
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Error: ${e.toString()}'),
@@ -208,31 +252,22 @@ class _TaskViewPageState extends State<TaskViewPage>
     );
   }
 
-  // For Representatives "For Class" - Save to Supabase
+  // For Representatives "For Class" - Save to Supabase and assign to all students
   void _addClassTask() async {
-    if (!mounted) return; // Add at start
-    _toggleSpeedDial();
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Center(child: CircularProgressIndicator()),
-    );
+    if (!mounted) return;
 
     try {
       final userId = supabase.auth.currentUser?.id;
 
       if (userId == null) {
-        if (mounted) Navigator.pop(context);
         throw Exception('Not authenticated');
       }
 
       final classes = await _classService.getMyClasses();
 
-      if (!mounted) return; // Check before using context
+      if (!mounted) return;
 
       if (classes.isEmpty) {
-        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -246,67 +281,55 @@ class _TaskViewPageState extends State<TaskViewPage>
       }
 
       final classId = classes[0].id;
-      final students = await _classService.getClassMembers(classId);
 
-      if (!mounted) return; // Check before using context
-
-      Navigator.pop(context);
-
-      if (students.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'No students in your class yet. Share code: ${classes[0].classCode}',
-            ),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 3),
-          ),
-        );
-        return;
-      }
-
+      // Show dialog
       showDialog(
         context: context,
-        builder: (context) => AddClassTaskDialog(
-          selectedDate: widget.selectedDate,
-          classStudents: students,
-          onTaskCreated: (task, studentIds) async {
-            try {
-              await _taskService.createClassTask(
-                task: task,
-                classId: classId,
-                studentIds: studentIds,
-              );
+        builder: (context) {
+          return AddClassTaskDialog(
+            selectedDate: widget.selectedDate,
+            classStudents: [],
+            onTaskCreated: (task, _) async {
+              try {
+                await _taskService.createClassTask(
+                  task: task,
+                  classId: classId,
+                );
 
-              if (mounted) {
-                // Check before using context
-                ScaffoldMessenger.of(context).showSnackBar(
+                final scaffoldMessenger = ScaffoldMessenger.of(context);
+                final navigator = Navigator.of(context);
+                
+                navigator.pop();
+                
+                scaffoldMessenger.showSnackBar(
                   SnackBar(
-                    content: Text(
-                      'Task sent to ${studentIds.length} students!',
-                    ),
-                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    content: Text('Task assigned to all students in class!'),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 2),
                   ),
                 );
-              }
-            } catch (e) {
-              if (mounted) {
-                // Check before using context
-                ScaffoldMessenger.of(context).showSnackBar(
+                
+                navigator.pop();
+                
+              } catch (e) {
+                final scaffoldMessenger = ScaffoldMessenger.of(context);
+                final navigator = Navigator.of(context);
+                
+                navigator.pop();
+                
+                scaffoldMessenger.showSnackBar(
                   SnackBar(
                     content: Text('Error: ${e.toString()}'),
                     backgroundColor: Colors.red,
                   ),
                 );
               }
-            }
-          },
-        ),
+            },
+          );
+        },
       );
     } catch (e) {
       if (mounted) {
-        // Check before using context
-        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: ${e.toString()}'),
@@ -405,15 +428,6 @@ class _TaskViewPageState extends State<TaskViewPage>
                   },
                 ),
 
-          // Backdrop
-          if (isSpeedDialOpen)
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: _toggleSpeedDial,
-                child: Container(color: Colors.black.withOpacity(0.7)),
-              ),
-            ),
-
           // Navigation Bar
           SafeArea(
             child: Align(
@@ -469,163 +483,16 @@ class _TaskViewPageState extends State<TaskViewPage>
             ),
           ),
 
-          // Speed Dial FAB
+          // SIMPLE FAB - No animations
           Positioned(
             right: 20,
             bottom: 100,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (widget.isRepresentative)
-                  AnimatedBuilder(
-                    animation: _forClassSlideAnimation,
-                    builder: (context, child) {
-                      return Transform.translate(
-                        offset: Offset(0, _forClassSlideAnimation.value),
-                        child: Opacity(
-                          opacity: isSpeedDialOpen ? 1.0 : 0.0,
-                          child: child,
-                        ),
-                      );
-                    },
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            'For Class',
-                            style: TextStyle(
-                              color: colorScheme.onSurface,
-                              fontSize: 12,
-                              fontFamily: 'SF Pro Text',
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 10),
-                        Material(
-                          elevation: 4,
-                          shape: CircleBorder(),
-                          color: Colors.purple[400],
-                          child: InkWell(
-                            customBorder: CircleBorder(),
-                            onTap: _addClassTask,
-                            child: Container(
-                              width: 48,
-                              height: 48,
-                              alignment: Alignment.center,
-                              child: Icon(
-                                Icons.group,
-                                size: 22,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                if (widget.isRepresentative) SizedBox(height: 16),
-
-                AnimatedBuilder(
-                  animation: _forYouSlideAnimation,
-                  builder: (context, child) {
-                    return Transform.translate(
-                      offset: Offset(0, _forYouSlideAnimation.value),
-                      child: Opacity(
-                        opacity: isSpeedDialOpen ? 1.0 : 0.0,
-                        child: child,
-                      ),
-                    );
-                  },
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          'For You',
-                          style: TextStyle(
-                            color: colorScheme.onSurface,
-                            fontSize: 12,
-                            fontFamily: 'SF Pro Text',
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 10),
-                      Material(
-                        elevation: 4,
-                        shape: CircleBorder(),
-                        color: colorScheme.primary,
-                        child: InkWell(
-                          customBorder: CircleBorder(),
-                          onTap: widget.isRepresentative
-                              ? _addRepresentativePersonalTask
-                              : _addPersonalTask,
-                          child: Container(
-                            width: 48,
-                            height: 48,
-                            alignment: Alignment.center,
-                            child: Icon(
-                              Icons.person,
-                              size: 22,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                SizedBox(height: 16),
-
-                AnimatedBuilder(
-                  animation: _rotationAnimation,
-                  builder: (context, child) {
-                    return Transform.rotate(
-                      angle: _rotationAnimation.value * 2 * 3.14159,
-                      child: Material(
-                        elevation: 6,
-                        shape: CircleBorder(),
-                        color: colorScheme.primary,
-                        child: InkWell(
-                          customBorder: CircleBorder(),
-                          onTap: widget.isRepresentative
-                              ? _toggleSpeedDial
-                              : _addPersonalTask,
-                          child: Container(
-                            width: 56,
-                            height: 56,
-                            alignment: Alignment.center,
-                            child: Icon(
-                              Icons.add,
-                              size: 28,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
+            child: FloatingActionButton(
+              backgroundColor: colorScheme.primary,
+              onPressed: widget.isRepresentative
+                  ? _showTaskOptions  // Show card for representatives
+                  : _addPersonalTask,  // Direct add for students
+              child: Icon(Icons.add, color: Colors.white),
             ),
           ),
         ],
@@ -700,266 +567,201 @@ class _TaskViewPageState extends State<TaskViewPage>
   Widget _buildCollapsedTaskCard(Meeting task) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return AnimatedOpacity(
-      duration: Duration(milliseconds: 300),
-      opacity: 1.0,
-      child: Row(
-        children: [
-          InkWell(
-            onTap: () => _toggleTaskCompletion(task),
-            borderRadius: BorderRadius.circular(20),
-            child: Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: task.isCompleted
-                      ? colorScheme.primary
-                      : colorScheme.onSurfaceVariant,
-                  width: 2,
-                ),
+    return Row(
+      children: [
+        InkWell(
+          onTap: () => _toggleTaskCompletion(task),
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
                 color: task.isCompleted
                     ? colorScheme.primary
-                    : Colors.transparent,
+                    : colorScheme.onSurfaceVariant,
+                width: 2,
               ),
-              child: task.isCompleted
-                  ? Icon(Icons.check, size: 16, color: Colors.white)
-                  : null,
+              color: task.isCompleted
+                  ? colorScheme.primary
+                  : Colors.transparent,
             ),
+            child: task.isCompleted
+                ? Icon(Icons.check, size: 16, color: Colors.white)
+                : null,
           ),
-          SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AnimatedDefaultTextStyle(
-                  duration: Duration(milliseconds: 300),
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'SF Pro Display',
-                    color: task.isCompleted
-                        ? colorScheme.onSurface
-                        : colorScheme.onSurface,
-                    decoration: task.isCompleted
-                        ? TextDecoration.lineThrough
-                        : null,
-                    decorationColor: colorScheme.onSurfaceVariant,
-                    decorationThickness: 2,
+        ),
+        SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                task.title ?? 'Untitled',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'SF Pro Display',
+                  color: colorScheme.onSurface,
+                  decoration: task.isCompleted ? TextDecoration.lineThrough : null,
+                  decorationColor: colorScheme.onSurfaceVariant,
+                  decorationThickness: 2,
+                ),
+              ),
+              SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.label_outline, size: 14, color: colorScheme.onSurfaceVariant),
+                  SizedBox(width: 4),
+                  Text(
+                    task.category ?? 'No Category',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontFamily: 'SF Pro Text',
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                  child: Text(task.title ?? 'Untitled'),
-                ),
-                SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.label_outline,
-                      size: 14,
+                  SizedBox(width: 16),
+                  Icon(Icons.access_time, size: 14, color: colorScheme.onSurfaceVariant),
+                  SizedBox(width: 4),
+                  Text(
+                    DateFormat('hh:mm a').format(task.from),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontFamily: 'SF Pro Text',
                       color: colorScheme.onSurfaceVariant,
                     ),
-                    SizedBox(width: 4),
-                    Text(
-                      task.category ?? 'No Category',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontFamily: 'SF Pro Text',
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    SizedBox(width: 16),
-                    Icon(
-                      Icons.access_time,
-                      size: 14,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      DateFormat('hh:mm a').format(task.from),
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontFamily: 'SF Pro Text',
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          IconButton(
-            icon: Icon(
-              Icons.delete_outline,
-              color: colorScheme.error,
-              size: 20,
-            ),
-            onPressed: () => _deleteTask(task),
-          ),
-        ],
-      ),
+        ),
+        IconButton(
+          icon: Icon(Icons.delete_outline, color: colorScheme.error, size: 20),
+          onPressed: () => _deleteTask(task),
+        ),
+      ],
     );
   }
 
   Widget _buildExpandedTaskCard(Meeting task) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return AnimatedOpacity(
-      duration: Duration(milliseconds: 300),
-      opacity: 1.0,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              InkWell(
-                onTap: () => _toggleTaskCompletion(task),
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: task.isCompleted
-                          ? colorScheme.primary
-                          : colorScheme.onSurfaceVariant,
-                      width: 2,
-                    ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            InkWell(
+              onTap: () => _toggleTaskCompletion(task),
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
                     color: task.isCompleted
                         ? colorScheme.primary
-                        : Colors.transparent,
+                        : colorScheme.onSurfaceVariant,
+                    width: 2,
                   ),
-                  child: task.isCompleted
-                      ? Icon(Icons.check, size: 16, color: Colors.white)
-                      : null,
+                  color: task.isCompleted ? colorScheme.primary : Colors.transparent,
                 ),
+                child: task.isCompleted
+                    ? Icon(Icons.check, size: 16, color: Colors.white)
+                    : null,
               ),
-              SizedBox(width: 16),
-              Expanded(
-                child: AnimatedDefaultTextStyle(
-                  duration: Duration(milliseconds: 300),
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'SF Pro Display',
-                    color: task.isCompleted
-                        ? colorScheme.onSurface
-                        : colorScheme.onSurface,
-                    decoration: task.isCompleted
-                        ? TextDecoration.lineThrough
-                        : null,
-                    decorationColor: colorScheme.onSurfaceVariant,
-                    decorationThickness: 2,
-                  ),
-                  child: Text(task.title ?? 'Untitled'),
-                ),
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.delete_outline,
-                  color: colorScheme.error,
-                  size: 20,
-                ),
-                onPressed: () => _deleteTask(task),
-              ),
-            ],
-          ),
-          SizedBox(height: 16),
-          AnimatedOpacity(
-            duration: Duration(milliseconds: 400),
-            opacity: 1.0,
-            child: Row(
-              children: [
-                Icon(
-                  Icons.label_outline,
-                  size: 16,
-                  color: colorScheme.onSurfaceVariant,
-                ),
-                SizedBox(width: 8),
-                Text(
-                  task.category ?? 'No Category',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontFamily: 'SF Pro Text',
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-                SizedBox(width: 24),
-                Icon(
-                  Icons.access_time,
-                  size: 16,
-                  color: colorScheme.onSurfaceVariant,
-                ),
-                SizedBox(width: 8),
-                Text(
-                  DateFormat('hh:mm a').format(task.from),
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontFamily: 'SF Pro Text',
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-              ],
             ),
-          ),
-          SizedBox(height: 12),
-          AnimatedOpacity(
-            duration: Duration(milliseconds: 500),
-            opacity: 1.0,
-            child: Row(
-              children: [
-                Icon(
-                  Icons.calendar_today,
-                  size: 16,
-                  color: colorScheme.onSurfaceVariant,
+            SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                task.title ?? 'Untitled',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'SF Pro Display',
+                  color: colorScheme.onSurface,
+                  decoration: task.isCompleted ? TextDecoration.lineThrough : null,
+                  decorationColor: colorScheme.onSurfaceVariant,
+                  decorationThickness: 2,
                 ),
-                SizedBox(width: 8),
-                Text(
-                  DateFormat('MMM dd, yyyy').format(task.from),
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontFamily: 'SF Pro Text',
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-          if (task.description != null && task.description!.isNotEmpty) ...[
-            SizedBox(height: 16),
-            AnimatedOpacity(
-              duration: Duration(milliseconds: 600),
-              opacity: 1.0,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Divider(color: colorScheme.outline),
-                  SizedBox(height: 12),
-                  Text(
-                    'Description',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontFamily: 'SF Pro Text',
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.onSurface,
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    task.description!,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontFamily: 'SF Pro Text',
-                      color: colorScheme.onSurfaceVariant,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
+            IconButton(
+              icon: Icon(Icons.delete_outline, color: colorScheme.error, size: 20),
+              onPressed: () => _deleteTask(task),
+            ),
+          ],
+        ),
+        SizedBox(height: 16),
+        Row(
+          children: [
+            Icon(Icons.label_outline, size: 16, color: colorScheme.onSurfaceVariant),
+            SizedBox(width: 8),
+            Text(
+              task.category ?? 'No Category',
+              style: TextStyle(
+                fontSize: 14,
+                fontFamily: 'SF Pro Text',
+                color: colorScheme.onSurface,
+              ),
+            ),
+            SizedBox(width: 24),
+            Icon(Icons.access_time, size: 16, color: colorScheme.onSurfaceVariant),
+            SizedBox(width: 8),
+            Text(
+              DateFormat('hh:mm a').format(task.from),
+              style: TextStyle(
+                fontSize: 14,
+                fontFamily: 'SF Pro Text',
+                color: colorScheme.onSurface,
               ),
             ),
           ],
+        ),
+        SizedBox(height: 12),
+        Row(
+          children: [
+            Icon(Icons.calendar_today, size: 16, color: colorScheme.onSurfaceVariant),
+            SizedBox(width: 8),
+            Text(
+              DateFormat('MMM dd, yyyy').format(task.from),
+              style: TextStyle(
+                fontSize: 14,
+                fontFamily: 'SF Pro Text',
+                color: colorScheme.onSurface,
+              ),
+            ),
+          ],
+        ),
+        if (task.description != null && task.description!.isNotEmpty) ...[
+          SizedBox(height: 16),
+          Divider(color: colorScheme.outline),
+          SizedBox(height: 12),
+          Text(
+            'Description',
+            style: TextStyle(
+              fontSize: 14,
+              fontFamily: 'SF Pro Text',
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            task.description!,
+            style: TextStyle(
+              fontSize: 14,
+              fontFamily: 'SF Pro Text',
+              color: colorScheme.onSurfaceVariant,
+              height: 1.4,
+            ),
+          ),
         ],
-      ),
+      ],
     );
   }
 

@@ -13,30 +13,37 @@ class TaskService {
     if (userId == null) return [];
 
     try {
-      // Personal tasks
+      // Get user's class IDs
+      final classMemberships = await _supabase
+          .from('class_members')
+          .select('class_id')
+          .eq('user_id', userId);
+
+      final classIds = classMemberships.map((m) => m['class_id']).toList();
+
+      // Personal tasks + Class tasks
+      List<Meeting> meetings = [];
+
+      // 1. Get personal tasks (created by user, no class_id)
       final personalTasks = await _supabase
           .from('tasks')
           .select()
           .eq('created_by', userId)
           .isFilter('class_id', null);
 
-      // Class tasks assigned to user
-      final assignedTasks = await _supabase
-          .from('task_assignments')
-          .select('tasks(*)')
-          .eq('student_id', userId);
-
-      List<Meeting> meetings = [];
-
-      // Convert personal tasks
       for (var task in personalTasks) {
         meetings.add(_taskToMeeting(task));
       }
 
-      // Convert assigned tasks
-      for (var item in assignedTasks) {
-        if (item['tasks'] != null) {
-          meetings.add(_taskToMeeting(item['tasks']));
+      // 2. Get class tasks (class_id in user's classes)
+      if (classIds.isNotEmpty) {
+        final classTasks = await _supabase
+            .from('tasks')
+            .select()
+            .inFilter('class_id', classIds);
+
+        for (var task in classTasks) {
+          meetings.add(_taskToMeeting(task));
         }
       }
 
@@ -88,7 +95,7 @@ class TaskService {
     );
   }
 
-  // Create personal task (for students)
+  // Create personal task (for students) - "For You"
   Future<void> createPersonalTask(Meeting task) async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) throw Exception('Not authenticated');
@@ -100,7 +107,10 @@ class TaskService {
       'due_date': task.from.toIso8601String(),
       'created_by': userId,
       'class_id': null,
+      'is_personal': true,
     });
+
+    print('✅ Personal task created successfully');
   }
 
   // Create local task (for representative's personal tasks)
@@ -108,37 +118,44 @@ class TaskService {
     await _localStorage.saveLocalTask(task);
   }
 
-  // Create class task and assign to students
+  // Create class task - "For Class" (Representatives only)
   Future<void> createClassTask({
     required Meeting task,
     required String classId,
-    required List<String> studentIds,
   }) async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) throw Exception('Not authenticated');
 
-    // 1. Create the task
-    final response = await _supabase
-        .from('tasks')
-        .insert({
-          'title': task.title,
-          'description': task.description,
-          'category': task.category,
-          'due_date': task.from.toIso8601String(),
-          'created_by': userId,
-          'class_id': classId,
-        })
-        .select()
-        .single();
+    try {
+      // Verify user is a representative
+      final userData = await _supabase
+          .from('users')
+          .select('role')
+          .eq('id', userId)
+          .single();
 
-    final taskId = response['id'];
+      if (userData['role'] != 'representative') {
+        throw Exception('Only representatives can create class tasks');
+      }
 
-    // 2. Assign to students
-    final assignments = studentIds
-        .map((studentId) => {'task_id': taskId, 'student_id': studentId})
-        .toList();
+      // Create the task with class_id
+      final response = await _supabase.from('tasks').insert({
+        'title': task.title ?? task.category,
+        'description': task.description ?? '',
+        'category': task.category,
+        'due_date': task.from.toIso8601String(),
+        'created_by': userId,
+        'class_id': classId, // THIS IS KEY - links task to class
+        'is_personal': false,
+      }).select().single();
 
-    await _supabase.from('task_assignments').insert(assignments);
+      print('✅ Class task created successfully!');
+      print('Task ID: ${response['id']}');
+      print('Class ID: $classId');
+    } catch (e) {
+      print('❌ Error creating class task: $e');
+      throw Exception('Failed to create class task: ${e.toString()}');
+    }
   }
 
   // Delete task from Supabase
